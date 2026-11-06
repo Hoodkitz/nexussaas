@@ -1,0 +1,13 @@
+{
+  "name": "sample-app",
+  "version": "1.0",
+  "description": "A sample application blueprint",
+  "entities": [
+    {"name": "User", "fields": ["id", "email", "name"]},
+    {"name": "Project", "fields": ["id", "name", "owner_id"]}
+  ],
+  "endpoints": [
+    {"method": "GET", "path": "/users", "description": "List users"},
+    {"method": "POST", "path": "/users", "description": "Create user"}
+  ]
+}

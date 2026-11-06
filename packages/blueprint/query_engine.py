@@ -25,6 +25,8 @@ class BlueprintQueryEngine:
                         "question": q["question"],
                         "required": q["required"],
                         "type": q["type"],
+                        "hint": q.get("hint", ""),
+                        "options": q.get("options"),
                         "choices": q.get("choices"),
                     }
                 self.current_question += 1

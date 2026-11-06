@@ -98,7 +98,6 @@ class NonFunctionalDef(BaseModel):
     monitoring: list[str] = ["metrics", "alerts", "logging"]
 
 class BlueprintTemplate(BaseModel):
-    """Complete blueprint template for app creation."""
     name: str = Field(..., min_length=1)
     version: str = "1.0"
     description: str
@@ -121,76 +120,253 @@ class BlueprintTemplate(BaseModel):
     webhooks_outbound: list[WebhookDef] = []
     non_functional: NonFunctionalDef = NonFunctionalDef()
 
-# Query phases for step-by-step blueprint creation
+# Query phases with beginner-friendly questions and 3 pre-formulated options
+# Each option: (label, value, explanation)
 QUERY_PHASES = [
     {
         "phase": 1,
         "name": "Vision & Scope",
         "questions": [
-            {"id": "name", "question": "Wie heißt die App?", "required": True, "type": "text"},
-            {"id": "description", "question": "Kurzbeschreibung in einem Satz?", "required": True, "type": "text"},
-            {"id": "target_audience", "question": "Wer nutzt die App? (B2B/B2C, Rollen)", "required": True, "type": "text"},
-            {"id": "core_problem", "question": "Welches Problem löst die App?", "required": True, "type": "text"},
-            {"id": "mvp_features", "question": "Welche Features sind im MVP? (kommagetrennt)", "required": True, "type": "list"},
-            {"id": "nice_to_have", "question": "Welche Features sind Nice-to-Have?", "required": False, "type": "list"},
+            {
+                "id": "name",
+                "question": "Wie soll deine App heißen?",
+                "required": True,
+                "type": "text",
+                "hint": "Ein kurzer, einprägsamer Name (z.B. 'TaskFlow', 'MeinShop')",
+                "options": None,
+            },
+            {
+                "id": "description",
+                "question": "Was macht deine App in einem Satz?",
+                "required": True,
+                "type": "text",
+                "hint": "z.B. 'Ein Tool um Aufgaben im Team zu verwalten'",
+                "options": None,
+            },
+            {
+                "id": "target_audience",
+                "question": "Wer nutzt die App?",
+                "required": True,
+                "type": "choice",
+                "hint": "Wähle die passendste Option",
+                "options": [
+                    ("Nur ich / mein Team (klein, intern)", "internal_team", "Einfachste Option — keine Registrierung für externe nötig"),
+                    ("Kleine Unternehmen / Freelancer", "small_business", "Braucht Login + einfache Rollen"),
+                    ("Öffentlich für alle (B2C)", "public_b2c", "Braucht vollständige Registrierung + Skalierung"),
+                ],
+            },
+            {
+                "id": "core_problem",
+                "question": "Welches Problem löst die App?",
+                "required": True,
+                "type": "text",
+                "hint": "z.B. 'Aufgaben gehen in E-Mails verloren'",
+                "options": None,
+            },
+            {
+                "id": "mvp_features",
+                "question": "Welche Funktionen braucht die App MINDESTENS?",
+                "required": True,
+                "type": "list",
+                "hint": "Kommagetrennt, z.B. 'Aufgaben erstellen, zuweisen, Status ändern'",
+                "options": [
+                    ("Nur anzeigen + erstellen", "view_create", "Einfachste MVP-Option"),
+                    ("Anzeigen, erstellen, bearbeiten, löschen", "crud", "Standard-CRUD — empfohlen"),
+                    ("CRUD + Suche + Filter", "crud_search", "Mehr Komfort, etwas mehr Aufwand"),
+                ],
+            },
         ],
     },
     {
         "phase": 2,
         "name": "Datenmodell",
         "questions": [
-            {"id": "entities", "question": "Welche Haupt-Entitäten gibt es? (z.B. User, Project, Task)", "required": True, "type": "entities"},
-            {"id": "tenant_scoped", "question": "Multi-Tenant? (ja/nein)", "required": True, "type": "boolean"},
-            {"id": "soft_delete", "question": "Soft-Delete für welche Entitäten?", "required": False, "type": "list"},
+            {
+                "id": "entities",
+                "question": "Welche Dinge (Objekte) verwaltet die App?",
+                "required": True,
+                "type": "list",
+                "hint": "z.B. 'Aufgabe, Projekt, Benutzer, Kommentar'",
+                "options": [
+                    ("1-2 Objekte (z.B. Aufgabe, Benutzer)", "simple", "Einfachster Start"),
+                    ("3-5 Objekte (z.B. Aufgabe, Projekt, Benutzer, Kommentar)", "medium", "Standard-App"),
+                    ("6+ Objekte (komplexes System)", "complex", "Größeres Projekt"),
+                ],
+            },
+            {
+                "id": "tenant_scoped",
+                "question": "Sollen Daten getrennt pro Nutzer/Firma gespeichert werden?",
+                "required": True,
+                "type": "choice",
+                "hint": "Multi-Tenant = jeder Nutzer sieht nur seine Daten",
+                "options": [
+                    ("Nein, alle sehen alles (einfachste Option)", "no", "Für persönliche Apps oder Single-User"),
+                    ("Ja, pro Nutzer getrennt", "per_user", "Standard für SaaS"),
+                    ("Ja, pro Firma/Team getrennt", "per_org", "Für B2B mit Organisationen"),
+                ],
+            },
         ],
     },
     {
         "phase": 3,
-        "name": "API & Endpunkte",
+        "name": "API & Zugriff",
         "questions": [
-            {"id": "crud", "question": "Für welche Entitäten CRUD-Operationen? (alle/auswahl)", "required": True, "type": "list"},
-            {"id": "custom_endpoints", "question": "Spezielle Endpunkte? (z.B. /search, /export)", "required": False, "type": "list"},
-            {"id": "pagination", "question": "Pagination-Typ? (cursor/offset/none)", "required": True, "type": "choice", "choices": ["cursor", "offset", "none"]},
-            {"id": "rate_limit", "question": "Rate Limit (Requests/Minute pro Tenant)?", "required": True, "type": "text"},
+            {
+                "id": "pagination",
+                "question": "Wie sollen Listen angezeigt werden?",
+                "required": True,
+                "type": "choice",
+                "hint": "Pagination = Aufteilen in Seiten",
+                "options": [
+                    ("Alles auf einmal laden (einfach, bis ~100 Einträge)", "none", "Einfachste Option für kleine Datenmengen"),
+                    ("Seitenweise (10-50 pro Seite)", "offset", "Standard für die meisten Apps"),
+                    ("Unendlich scrollen (wie Twitter/Instagram)", "cursor", "Beste UX, etwas komplexer"),
+                ],
+            },
+            {
+                "id": "rate_limit",
+                "question": "Wie viele Anfragen pro Minute erlauben?",
+                "required": True,
+                "type": "choice",
+                "hint": "Schützt vor Überlastung",
+                "options": [
+                    ("60 pro Minute (entspannt, reicht meist)", "60", "Für kleine Apps"),
+                    ("120 pro Minute (Standard)", "120", "Für mittlere Apps"),
+                    ("300 pro Minute (hoch, für APIs)", "300", "Für API-lastige Apps"),
+                ],
+            },
         ],
     },
     {
         "phase": 4,
-        "name": "Authentifizierung & Autorisierung",
+        "name": "Login & Nutzer",
         "questions": [
-            {"id": "auth_method", "question": "Auth-Methode? (email_password/oauth_google/oauth_github/magic_link/api_key)", "required": True, "type": "choice", "choices": ["email_password", "oauth_google", "oauth_github", "magic_link", "api_key"]},
-            {"id": "roles", "question": "Welche Rollen? (kommagetrennt, default: owner,admin,member,viewer)", "required": True, "type": "list"},
-            {"id": "tenant_onboarding", "question": "Tenant-Onboarding? (self_service/admin_provisioned)", "required": True, "type": "choice", "choices": ["self_service", "admin_provisioned"]},
+            {
+                "id": "auth_method",
+                "question": "Wie sollen Nutzer sich einloggen?",
+                "required": True,
+                "type": "choice",
+                "hint": "Wähle die einfachste Option",
+                "options": [
+                    ("E-Mail + Passwort (einfachste Option)", "email_password", "Keine externen Dienste nötig"),
+                    ("Google Login (1 Klick für Nutzer)", "oauth_google", "Braucht Google Console Setup"),
+                    ("Magic Link (Link per E-Mail)", "magic_link", "Kein Passwort, aber E-Mail-Service nötig"),
+                ],
+            },
+            {
+                "id": "tenant_onboarding",
+                "question": "Wie kommen neue Nutzer zur App?",
+                "required": True,
+                "type": "choice",
+                "hint": "Onboarding = Registrierung",
+                "options": [
+                    ("Jeder kann sich selbst registrieren (einfachste)", "self_service", "Offene Registrierung"),
+                    ("Nur per Einladung (sicherer)", "invite_only", "Admin lädt ein"),
+                    ("Admin erstellt Konten manuell (kontrolliert)", "admin_provisioned", "Für interne Tools"),
+                ],
+            },
         ],
     },
     {
         "phase": 5,
-        "name": "Frontend",
+        "name": "Oberfläche",
         "questions": [
-            {"id": "frontend", "question": "Frontend-Framework? (react/vue/svelte/none)", "required": True, "type": "choice", "choices": ["react", "vue", "svelte", "none"]},
-            {"id": "pages", "question": "Welche Seiten/Views? (kommagetrennt)", "required": True, "type": "list"},
-            {"id": "responsive", "question": "Responsive? (mobile_first/desktop_first)", "required": True, "type": "choice", "choices": ["mobile_first", "desktop_first"]},
-            {"id": "dark_mode", "question": "Dark Mode? (ja/nein)", "required": False, "type": "boolean"},
-            {"id": "i18n", "question": "Sprachen? (kommagetrennt, z.B. de,en)", "required": False, "type": "list"},
+            {
+                "id": "frontend",
+                "question": "Braucht die App eine Weboberfläche?",
+                "required": True,
+                "type": "choice",
+                "hint": "Frontend = was der Nutzer sieht",
+                "options": [
+                    ("Ja, mit React (modern, beliebt)", "react", "Beste Wahl für die meisten Apps"),
+                    ("Ja, mit Vue (einfacher zu lernen)", "vue", "Guter Einstieg"),
+                    ("Nein, nur API (Backend-only)", "none", "Für reine Backend-Services"),
+                ],
+            },
+            {
+                "id": "responsive",
+                "question": "Soll die App auf dem Handy funktionieren?",
+                "required": True,
+                "type": "choice",
+                "hint": "Responsive = passt sich an Bildschirmgröße an",
+                "options": [
+                    ("Ja, Handy zuerst (Mobile-First)", "mobile_first", "Für Apps die mobil genutzt werden"),
+                    ("Ja, Desktop zuerst (Desktop-First)", "desktop_first", "Für Büro-Apps"),
+                    ("Nur Desktop (kein Mobile)", "desktop_only", "Einfachste Option"),
+                ],
+            },
+            {
+                "id": "dark_mode",
+                "question": "Dark Mode (dunkles Design)?",
+                "required": False,
+                "type": "choice",
+                "hint": "Dunkles Farbschema",
+                "options": [
+                    ("Ja, mit Umschalter", "yes", "Nutzer kann wählen"),
+                    ("Nein, nur helles Design", "no", "Einfachste Option"),
+                    ("Automatisch (folgt System-Einstellung)", "auto", "Kein Button nötig"),
+                ],
+            },
         ],
     },
     {
         "phase": 6,
-        "name": "Integrationen",
+        "name": "Extras & Integrationen",
         "questions": [
-            {"id": "integrations", "question": "Externe Integrationen? (stripe,sendgrid,s3,slack,github)", "required": False, "type": "list"},
-            {"id": "webhooks_outbound", "question": "Ausgehende Webhooks? (Events kommagetrennt)", "required": False, "type": "list"},
-            {"id": "import_export", "question": "Import/Export? (csv,json,pdf)", "required": False, "type": "list"},
+            {
+                "id": "integrations",
+                "question": "Braucht die App externe Dienste?",
+                "required": False,
+                "type": "choice",
+                "hint": "Zahlungen, E-Mails, Dateispeicher",
+                "options": [
+                    ("Keine (einfachste Option)", "none", "Nur die App selbst"),
+                    ("E-Mail-Versand (z.B. SendGrid)", "email", "Für Benachrichtigungen"),
+                    ("Zahlungen (Stripe)", "stripe", "Für kostenpflichtige Apps"),
+                ],
+            },
+            {
+                "id": "i18n",
+                "question": "Mehrsprachig?",
+                "required": False,
+                "type": "choice",
+                "hint": "Internationalisierung",
+                "options": [
+                    ("Nur Deutsch", "de", "Einfachste Option"),
+                    ("Deutsch + Englisch", "de,en", "Für internationale Nutzer"),
+                    ("Englisch only", "en", "Für englischsprachige Zielgruppe"),
+                ],
+            },
         ],
     },
     {
         "phase": 7,
-        "name": "Nicht-funktionale Anforderungen",
+        "name": "Größe & Sicherheit",
         "questions": [
-            {"id": "expected_users", "question": "Erwartete Nutzerzahl?", "required": True, "type": "number"},
-            {"id": "response_time", "question": "Response-Zeit-Ziel (ms)?", "required": True, "type": "number"},
-            {"id": "compliance", "question": "Compliance? (gdpr,hipaa,soc2)", "required": True, "type": "list"},
-            {"id": "backup", "question": "Backup-Strategie?", "required": True, "type": "text"},
+            {
+                "id": "expected_users",
+                "question": "Wie viele Nutzer erwartest du?",
+                "required": True,
+                "type": "choice",
+                "hint": "Beeinflusst die Infrastruktur",
+                "options": [
+                    ("Unter 100 (klein, günstig)", "100", "Kleiner Server reicht"),
+                    ("100-1.000 (mittel)", "1000", "Standard-Setup"),
+                    ("Über 1.000 (groß)", "10000", "Skalierbare Infrastruktur nötig"),
+                ],
+            },
+            {
+                "id": "compliance",
+                "question": "Datenschutz-Anforderungen?",
+                "required": True,
+                "type": "choice",
+                "hint": "DSGVO = EU-Datenschutz",
+                "options": [
+                    ("DSGVO (Standard für EU)", "gdpr", "Für Apps mit EU-Nutzern"),
+                    ("DSGVO + keine besonderen Anforderungen", "gdpr_basic", "Einfachste Option"),
+                    ("HIPAA (Gesundheitsdaten, USA)", "hipaa", "Für medizinische Apps"),
+                ],
+            },
         ],
     },
 ]

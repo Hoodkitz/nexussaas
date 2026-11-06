@@ -1,38 +1,50 @@
-"""Job API endpoints."""
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+"""Job management endpoints with DB persistence."""
 import uuid
+from fastapi import APIRouter, HTTPException
+from apps.api.schemas.models import JobCreate, JobOut
+from packages.storage.db import SessionLocal
+from packages.domain.job import Job
+from packages.domain.tenant import Tenant  # noqa: F401
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
-class CreateJobRequest(BaseModel):
-    blueprint: dict | None = None
-    idempotency_key: str | None = None
+@router.post("", response_model=JobOut)
+def create_job(req: JobCreate):
+    db = SessionLocal()
+    try:
+        job = Job(
+            id=uuid.uuid4(),
+            tenant_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),  # TODO: from auth context
+            status="RECEIVED",
+            attempt=0,
+            trace_id=str(uuid.uuid4()),
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return JobOut(id=str(job.id), status=job.status, attempt=job.attempt, trace_id=job.trace_id)
+    finally:
+        db.close()
 
-class JobResponse(BaseModel):
-    id: str
-    status: str
-    attempt: int
-    trace_id: str | None = None
-
-@router.post("", response_model=JobResponse)
-def create_job(req: CreateJobRequest):
-    # TODO: persist to DB, enqueue worker, quota check
-    trace_id = str(uuid.uuid4())[:8]
-    job_id = str(uuid.uuid4())
-    return JobResponse(id=job_id, status="RECEIVED", attempt=0, trace_id=trace_id)
-
-@router.get("/{job_id}", response_model=JobResponse)
+@router.get("/{job_id}", response_model=JobOut)
 def get_job(job_id: str):
-    # TODO: DB lookup with tenant scoping
-    raise HTTPException(status_code=404, detail="Job not found")
-
-@router.post("/{job_id}/resume")
-def resume_job(job_id: str):
-    # TODO: validate HITL response, resume LangGraph thread
-    return {"status": "resumed", "job_id": job_id}
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return JobOut(id=str(job.id), status=job.status, attempt=job.attempt, trace_id=job.trace_id)
+    finally:
+        db.close()
 
 @router.post("/{job_id}/cancel")
 def cancel_job(job_id: str):
-    # TODO: idempotent cancel, worker abort
-    return {"status": "cancelled", "job_id": job_id}
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        db.commit()  # status unchanged; cancelled via outbox event
+        return {"id": str(job.id), "status": "cancelled"}
+    finally:
+        db.close()

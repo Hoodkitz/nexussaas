@@ -1,6 +1,6 @@
 """NexusSaaS API entry point."""
 from fastapi import FastAPI
-from apps.api.routers import health, jobs, webhooks, auth, tenants, export, billing
+from apps.api.routers import health, jobs, webhooks, auth, tenants, export, billing, oidc
 
 app = FastAPI(title="NexusSaaS API", version="0.1.0")
 
@@ -11,6 +11,7 @@ app.include_router(jobs.router)
 app.include_router(webhooks.router)
 app.include_router(export.router)
 app.include_router(billing.router)
+app.include_router(oidc.router)
 
 @app.get("/")
 def root():

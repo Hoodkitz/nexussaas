@@ -6,6 +6,8 @@ except ImportError:
     stripe = None
 from fastapi import APIRouter, Request, HTTPException
 from packages.domain.webhook_inbox import WebhookInbox
+from packages.storage.outbox import OutboxEvent
+import json
 from packages.storage.db import SessionLocal
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
@@ -41,5 +43,18 @@ async def stripe_webhook(request: Request):
     finally:
         db.close()
 
-    # TODO: enqueue processing job via outbox
+    # Enqueue processing via outbox
+    db = SessionLocal()
+    try:
+        outbox = OutboxEvent(
+            aggregate_type="stripe_webhook",
+            aggregate_id=event["id"],
+            event_type=event["type"],
+            payload=event["data"]["object"],
+            idempotency_key=event["id"],
+        )
+        db.add(outbox)
+        db.commit()
+    finally:
+        db.close()
     return {"status": "received"}

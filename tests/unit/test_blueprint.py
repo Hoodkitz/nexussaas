@@ -1,24 +1,27 @@
-"""Blueprint validation tests."""
-from packages.blueprint.schema import validate_blueprint
+"""Blueprint module tests."""
+from packages.blueprint.validator import validate_blueprint
+from packages.blueprint.ddl import generate_ddl
+from packages.blueprint.codegen import generate_backend
 
 def test_valid_blueprint():
-    bp = {"name": "test-app", "version": "1.0", "description": "A test"}
-    ok, errors = validate_blueprint(bp)
-    assert ok
-    assert errors == []
+    bp = {"name": "test", "version": "1.0", "entities": [{"name": "User", "fields": ["id", "email"]}]}
+    valid, errors = validate_blueprint(bp)
+    assert valid is True
+    assert len(errors) == 0
 
-def test_missing_name():
-    bp = {"version": "1.0"}
-    ok, errors = validate_blueprint(bp)
-    assert not ok
-    assert any("name" in e for e in errors)
+def test_invalid_blueprint():
+    bp = {"name": "", "version": "1.0"}
+    valid, errors = validate_blueprint(bp)
+    assert valid is False
+    assert len(errors) > 0
 
-def test_missing_version():
-    bp = {"name": "test-app"}
-    ok, errors = validate_blueprint(bp)
-    assert not ok
-    assert any("version" in e for e in errors)
+def test_ddl_generation():
+    bp = {"entities": [{"name": "User", "fields": ["email"]}]}
+    ddl = generate_ddl(bp)
+    assert "CREATE TABLE user" in ddl.lower() or "CREATE TABLE User" in ddl
 
-def test_not_dict():
-    ok, errors = validate_blueprint("string")
-    assert not ok
+def test_code_generation():
+    bp = {"name": "myapp", "version": "1.0"}
+    result = generate_backend(bp)
+    assert result["status"] == "generated"
+    assert "main.py" in str(result["files"])

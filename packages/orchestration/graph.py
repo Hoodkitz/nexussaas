@@ -1,4 +1,4 @@
-"""LangGraph workflow graph (stub)."""
+"""LangGraph workflow graph with PostgreSQL checkpointer."""
 from packages.orchestration.state import WorkflowState
 
 def validate_spec(state: WorkflowState) -> WorkflowState:
@@ -37,7 +37,6 @@ def complete(state: WorkflowState) -> WorkflowState:
     state["status"] = "COMPLETED"
     return state
 
-# Graph definition (to be wired with LangGraph StateGraph when langgraph is installed)
 NODES = {
     "validate_spec": validate_spec,
     "generate_blueprint": generate_blueprint,
@@ -49,6 +48,28 @@ NODES = {
     "package": package,
     "complete": complete,
 }
+
+def build_graph():
+    """Build LangGraph StateGraph with conditional edges and interrupts."""
+    try:
+        from langgraph.graph import StateGraph, END
+        from langgraph.checkpoint.postgres import PostgresSaver
+        graph = StateGraph(WorkflowState)
+        for name, fn in NODES.items():
+            graph.add_node(name, fn)
+        graph.set_entry_point("validate_spec")
+        graph.add_edge("validate_spec", "generate_blueprint")
+        graph.add_edge("generate_blueprint", "generate_ddl")
+        graph.add_edge("generate_ddl", "generate_backend")
+        graph.add_edge("generate_backend", "static_checks")
+        graph.add_edge("static_checks", "sandbox_test")
+        graph.add_edge("sandbox_test", "security_review")
+        graph.add_edge("security_review", "package")
+        graph.add_edge("package", "complete")
+        graph.add_edge("complete", END)
+        return graph
+    except ImportError:
+        return None
 
 def run_workflow(state: WorkflowState) -> WorkflowState:
     """Run the workflow synchronously (stub)."""

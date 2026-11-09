@@ -272,21 +272,47 @@ function submitAnswer() {
   researchContent.innerHTML = '<span class="ai-analyzing">🔍 KI recherchiert die Bedeutung deiner Antwort...</span>';
   document.getElementById('next-btn').disabled = true;
   
-  // Simulate AI research (in production: call backend API)
-  setTimeout(() => {
-    const research = generateResearch(q.id, answer);
-    researchContent.innerHTML = research;
-    document.getElementById('next-btn').disabled = false;
-    document.getElementById('next-btn').onclick = function() {
-      researchDiv.classList.remove('active');
-      currentQ++;
-      if (currentQ < questions.length) {
-        showQuestion();
-      } else {
-        startLoading();
+  // Real AI research via backend API
+  const API_URL = 'http://localhost:8000/api/v1';
+  fetch(API_URL + '/blueprint/research?question_id=' + encodeURIComponent(q.id) + '&answer=' + encodeURIComponent(answer), {method: 'POST'})
+    .then(r => r.json())
+    .then(data => {
+      let html = '<div class="research-item">📊 ' + (data.research_prompt || 'Analyse abgeschlossen') + '</div>';
+      if (data.follow_up_questions && data.follow_up_questions.length > 0) {
+        html += '<div class="research-item">❓ Folgefragen:</div>';
+        data.follow_up_questions.forEach(fq => {
+          html += '<div class="research-item" style="margin-left:20px;">• ' + fq + '</div>';
+        });
       }
-    };
-  }, 1500);
+      html += '<div class="research-item">✅ Diese Information wird in die Blueprint-Erstellung und App-Generierung einfließen.</div>';
+      researchContent.innerHTML = html;
+      document.getElementById('next-btn').disabled = false;
+      document.getElementById('next-btn').onclick = function() {
+        researchDiv.classList.remove('active');
+        currentQ++;
+        if (currentQ < questions.length) {
+          showQuestion();
+        } else {
+          startLoading();
+        }
+      };
+    })
+    .catch(err => {
+      // Fallback: show answer-based research
+      researchContent.innerHTML = '<div class="research-item">📊 Antwort: ' + answer + '</div>' +
+        '<div class="research-item">🔍 Recherche: ' + q.q + ' → ' + answer + '</div>' +
+        '<div class="research-item">✅ Wird in Blueprint und App-Erstellung einfließen.</div>';
+      document.getElementById('next-btn').disabled = false;
+      document.getElementById('next-btn').onclick = function() {
+        researchDiv.classList.remove('active');
+        currentQ++;
+        if (currentQ < questions.length) {
+          showQuestion();
+        } else {
+          startLoading();
+        }
+      };
+    });
 }
 
 function generateResearch(qId, answer) {

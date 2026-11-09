@@ -146,6 +146,19 @@ async function startBlueprint() {
 }
 
 async function fetchNextQuestion() {
+  // Check pending questions first
+  if (window.pendingQuestions && window.pendingQuestions.length > 0) {
+    const nextQ = window.pendingQuestions.shift();
+    currentQuestion = {
+      id: nextQ.id || ('q_' + questionCount),
+      q: nextQ.q,
+      hint: nextQ.hint || '',
+      type: nextQ.type || 'text',
+      options: nextQ.options || null
+    };
+    showQuestion();
+    return;
+  }
   // First question is always the app description
   if (questionCount === 0) {
     currentQuestion = {
@@ -159,6 +172,17 @@ async function fetchNextQuestion() {
 }
 
 function showQuestion() {
+  // Check pending questions first
+  if (window.pendingQuestions && window.pendingQuestions.length > 0) {
+    const nextQ = window.pendingQuestions.shift();
+    currentQuestion = {
+      id: nextQ.id || ('q_' + questionCount),
+      q: nextQ.q,
+      hint: nextQ.hint || '',
+      type: nextQ.type || 'text',
+      options: nextQ.options || null
+    };
+  }
   document.getElementById('question-text').textContent = currentQuestion.q;
   document.getElementById('question-hint').textContent = currentQuestion.hint;
   document.getElementById('progress').style.width = (questionCount / MAX_QUESTIONS * 100) + '%';
@@ -228,7 +252,8 @@ async function submitAnswer() {
     if (data.follow_up_questions && data.follow_up_questions.length > 0 && questionCount < MAX_QUESTIONS) {
       const nextQ = data.follow_up_questions[0];
       // Store remaining follow-ups for later
-      window.pendingQuestions = data.follow_up_questions.slice(1);
+      if (!window.pendingQuestions) window.pendingQuestions = [];
+      window.pendingQuestions = window.pendingQuestions.concat(data.follow_up_questions.slice(1));
       currentQuestion = {
         id: nextQ.id || ('q_' + questionCount),
         q: nextQ.q,

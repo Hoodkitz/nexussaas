@@ -60,21 +60,52 @@ Nur JSON, keine anderen Texte."""
 
     response = await call_ollama(prompt)
     
-    # Try to parse JSON from response
+    # Try to parse JSON from response - handle nested JSON strings
     try:
-        # Find JSON in response
+        # Find the outermost JSON
         start = response.find('{')
         end = response.rfind('}') + 1
         if start >= 0 and end > start:
-            data = json.loads(response[start:end])
+            json_str = response[start:end]
+            data = json.loads(json_str)
+            
+            # The LLM might return research as a JSON string - parse it
+            research_raw = data.get("research", "")
+            if isinstance(research_raw, str) and research_raw.strip().startswith('{'):
+                try:
+                    inner = json.loads(research_raw)
+                    research = inner.get("research", research_raw)
+                    sources = inner.get("sources", data.get("sources", []))
+                    follow_ups = inner.get("follow_up_questions", data.get("follow_up_questions", []))
+                except json.JSONDecodeError:
+                    research = research_raw
+                    sources = data.get("sources", [])
+                    follow_ups = data.get("follow_up_questions", [])
+            else:
+                research = research_raw
+                sources = data.get("sources", [])
+                follow_ups = data.get("follow_up_questions", [])
+            
+            # Clean up follow-up questions
+            clean_followups = []
+            for fq in follow_ups:
+                if isinstance(fq, dict) and fq.get("q"):
+                    clean_followups.append({
+                        "id": fq.get("id", "fq_" + str(len(clean_followups))),
+                        "q": fq.get("q", ""),
+                        "hint": fq.get("hint", ""),
+                        "type": fq.get("type", "text"),
+                        "options": fq.get("options", None)
+                    })
+            
             return {
                 "question_id": question_id,
                 "answer": answer,
-                "research": data.get("research", "Recherche abgeschlossen"),
-                "sources": data.get("sources", []),
-                "follow_up_questions": data.get("follow_up_questions", [])
+                "research": research if research else "Recherche abgeschlossen",
+                "sources": sources if sources else ["NexusSaaS Blueprint Engine"],
+                "follow_up_questions": clean_followups
             }
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, Exception) as e:
         pass
     
     # Fallback: return raw response

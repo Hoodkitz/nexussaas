@@ -1,0 +1,8 @@
+{
+  "appId": "com.nexussaas.matrix",
+  "appName": "NexusSaaS Matrix",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

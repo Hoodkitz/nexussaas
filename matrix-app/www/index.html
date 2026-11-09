@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexusSaaS — Matrix Blueprint</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; }
+#matrix-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+.container { position: relative; z-index: 1; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+.screen { display: none; width: 100%; max-width: 600px; text-align: center; }
+.screen.active { display: block; }
+h1 { font-size: 2.5rem; text-shadow: 0 0 10px #0f0; margin-bottom: 20px; }
+h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
+.question { font-size: 1.3rem; margin-bottom: 20px; padding: 20px; border: 1px solid #0f0; border-radius: 5px; background: rgba(0,20,0,0.8); }
+.options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.option { padding: 15px; border: 1px solid #0f0; border-radius: 5px; cursor: pointer; background: rgba(0,30,0,0.5); transition: all 0.3s; text-align: left; }
+.option:hover { background: rgba(0,80,0,0.8); box-shadow: 0 0 10px #0f0; }
+.option.selected { background: rgba(0,120,0,0.9); box-shadow: 0 0 15px #0f0; }
+.option .label { font-weight: bold; }
+.option .desc { font-size: 0.85rem; color: #0a0; margin-top: 5px; }
+.input-field { width: 100%; padding: 15px; background: rgba(0,20,0,0.8); border: 1px solid #0f0; color: #0f0; font-family: inherit; font-size: 1rem; border-radius: 5px; margin-bottom: 20px; }
+.input-field:focus { outline: none; box-shadow: 0 0 10px #0f0; }
+.btn { padding: 15px 30px; background: #0f0; color: #000; border: none; border-radius: 5px; font-family: inherit; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+.btn:hover { background: #0a0; box-shadow: 0 0 15px #0f0; }
+.btn:disabled { background: #050; color: #030; cursor: not-allowed; }
+.progress-bar { width: 100%; height: 5px; background: #030; border-radius: 3px; margin-bottom: 20px; overflow: hidden; }
+.progress-fill { height: 100%; background: #0f0; width: 0%; transition: width 0.5s; box-shadow: 0 0 10px #0f0; }
+.loading-text { font-size: 1.2rem; margin-top: 20px; }
+.project-card { border: 1px solid #0f0; border-radius: 5px; padding: 20px; margin: 10px 0; background: rgba(0,20,0,0.8); text-align: left; }
+.project-card h3 { color: #0f0; margin-bottom: 10px; }
+.project-card p { color: #0a0; font-size: 0.9rem; margin-bottom: 10px; }
+.download-btn { display: inline-block; padding: 10px 20px; background: #0f0; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; }
+.download-btn:hover { background: #0a0; }
+.hint { font-size: 0.85rem; color: #0a0; margin-bottom: 15px; font-style: italic; }
+.phase { font-size: 0.9rem; color: #0a0; margin-bottom: 10px; }
+
+.chat-btn { display: inline-block; padding: 10px 20px; background: #003300; color: #0f0; border: 1px solid #0f0; border-radius: 5px; font-weight: bold; cursor: pointer; margin-left: 10px; }
+.chat-btn:hover { background: #006600; box-shadow: 0 0 10px #0f0; }
+.chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; }
+.chat-overlay.active { display: flex; }
+.chat-window { width: 90%; max-width: 500px; height: 70%; background: #001100; border: 1px solid #0f0; border-radius: 10px; display: flex; flex-direction: column; }
+.chat-header { padding: 15px; border-bottom: 1px solid #0f0; display: flex; justify-content: space-between; align-items: center; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 15px; }
+.chat-msg { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 80%; }
+.chat-msg.ai { background: rgba(0,50,0,0.5); border: 1px solid #0a0; align-self: flex-start; }
+.chat-msg.user { background: rgba(0,100,0,0.5); border: 1px solid #0f0; align-self: flex-end; margin-left: auto; }
+.chat-input-area { padding: 15px; border-top: 1px solid #0f0; display: flex; gap: 10px; }
+.chat-input-area input { flex: 1; }
+</style>
+</head>
+<body>
+<canvas id="matrix-bg"></canvas>
+<div class="container">
+  <!-- Start Screen -->
+  <div id="start-screen" class="screen active">
+    <h1>NEXUSSAAS</h1>
+    <p style="margin-bottom:30px; color:#0a0;">Blueprint Generator — Matrix Edition</p>
+    <button class="btn" onclick="startBlueprint()">START</button>
+  </div>
+
+  <!-- Question Screen -->
+  <div id="question-screen" class="screen">
+    <div class="phase" id="phase-info"></div>
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+    <div class="question" id="question-text"></div>
+    <div class="hint" id="question-hint"></div>
+    <div class="options" id="options-container"></div>
+    <input type="text" class="input-field" id="answer-input" placeholder="Oder eigene Antwort eingeben...">
+    <button class="btn" id="next-btn" onclick="submitAnswer()" disabled>WEITER</button>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="screen">
+    <h2>ERSTELLE APP...</h2>
+    <div class="progress-bar"><div class="progress-fill" id="loading-progress"></div></div>
+    <div class="loading-text" id="loading-text">Initialisiere...</div>
+  </div>
+
+  <!-- Projects Screen -->
+  <div id="projects-screen" class="screen">
+    <h1>PROJEKTE</h1>
+    <div id="projects-list"></div>
+    <button class="btn" style="margin-top:20px;" onclick="restart()">NEUES PROJEKT</button>
+  </div>
+</div>
+
+<script>
+// Matrix rain effect
+const canvas = document.getElementById('matrix-bg');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
+const fontSize = 14;
+const columns = canvas.width / fontSize;
+const drops = Array(Math.floor(columns)).fill(1);
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0f0';
+  ctx.font = fontSize + 'px monospace';
+  for (let i = 0; i < drops.length; i++) {
+    const text = chars[Math.floor(Math.random() * chars.length)];
+    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+setInterval(drawMatrix, 33);
+
+// Blueprint questions (from query_engine)
+const questions = [
+  {phase:1, phaseName:"Vision & Scope", id:"name", q:"Wie soll deine App heißen?", hint:"Ein kurzer, einprägsamer Name", options:null},
+  {phase:1, phaseName:"Vision & Scope", id:"description", q:"Was macht deine App in einem Satz?", hint:"z.B. 'Ein Tool um Aufgaben im Team zu verwalten'", options:null},
+  {phase:1, phaseName:"Vision & Scope", id:"target_audience", q:"Wer nutzt die App?", hint:"Wähle die passendste Option", options:[
+    ["Nur ich / mein Team (klein, intern)", "internal_team", "Einfachste Option"],
+    ["Kleine Unternehmen / Freelancer", "small_business", "Braucht Login + einfache Rollen"],
+    ["Öffentlich für alle (B2C)", "public_b2c", "Braucht vollständige Registrierung"]
+  ]},
+  {phase:1, phaseName:"Vision & Scope", id:"core_problem", q:"Welches Problem löst die App?", hint:"z.B. 'Aufgaben gehen in E-Mails verloren'", options:null},
+  {phase:1, phaseName:"Vision & Scope", id:"mvp_features", q:"Welche Funktionen braucht die App MINDESTENS?", hint:"Kommagetrennt", options:[
+    ["Nur anzeigen + erstellen", "view_create", "Einfachste MVP-Option"],
+    ["Anzeigen, erstellen, bearbeiten, löschen", "crud", "Standard-CRUD — empfohlen"],
+    ["CRUD + Suche + Filter", "crud_search", "Mehr Komfort"]
+  ]},
+  {phase:2, phaseName:"Datenmodell", id:"entities", q:"Welche Dinge verwaltet die App?", hint:"z.B. 'Aufgabe, Projekt, Benutzer, Kommentar'", options:[
+    ["1-2 Objekte", "simple", "Einfachster Start"],
+    ["3-5 Objekte", "medium", "Standard-App"],
+    ["6+ Objekte", "complex", "Größeres Projekt"]
+  ]},
+  {phase:2, phaseName:"Datenmodell", id:"tenant_scoped", q:"Sollen Daten getrennt pro Nutzer/Firma gespeichert werden?", hint:"Multi-Tenant", options:[
+    ["Nein, alle sehen alles", "no", "Für persönliche Apps"],
+    ["Ja, pro Nutzer getrennt", "per_user", "Standard für SaaS"],
+    ["Ja, pro Firma/Team getrennt", "per_org", "Für B2B"]
+  ]},
+  {phase:3, phaseName:"API & Zugriff", id:"pagination", q:"Wie sollen Listen angezeigt werden?", hint:"Pagination", options:[
+    ["Alles auf einmal laden", "none", "Einfachste Option"],
+    ["Seitenweise (10-50 pro Seite)", "offset", "Standard"],
+    ["Unendlich scrollen", "cursor", "Beste UX"]
+  ]},
+  {phase:3, phaseName:"API & Zugriff", id:"rate_limit", q:"Wie viele Anfragen pro Minute erlauben?", hint:"Schützt vor Überlastung", options:[
+    ["60 pro Minute", "60", "Für kleine Apps"],
+    ["120 pro Minute", "120", "Für mittlere Apps"],
+    ["300 pro Minute", "300", "Für API-lastige Apps"]
+  ]},
+  {phase:4, phaseName:"Login & Nutzer", id:"auth_method", q:"Wie sollen Nutzer sich einloggen?", hint:"Wähle die einfachste Option", options:[
+    ["E-Mail + Passwort", "email_password", "Keine externen Dienste nötig"],
+    ["Google Login", "oauth_google", "Braucht Google Console Setup"],
+    ["Magic Link", "magic_link", "Kein Passwort, aber E-Mail-Service nötig"]
+  ]},
+  {phase:4, phaseName:"Login & Nutzer", id:"tenant_onboarding", q:"Wie kommen neue Nutzer zur App?", hint:"Onboarding", options:[
+    ["Jeder kann sich selbst registrieren", "self_service", "Offene Registrierung"],
+    ["Nur per Einladung", "invite_only", "Admin lädt ein"],
+    ["Admin erstellt Konten manuell", "admin_provisioned", "Für interne Tools"]
+  ]},
+  {phase:5, phaseName:"Oberfläche", id:"frontend", q:"Braucht die App eine Weboberfläche?", hint:"Frontend", options:[
+    ["Ja, mit React", "react", "Beste Wahl für die meisten Apps"],
+    ["Ja, mit Vue", "vue", "Guter Einstieg"],
+    ["Nein, nur API", "none", "Für reine Backend-Services"]
+  ]},
+  {phase:5, phaseName:"Oberfläche", id:"responsive", q:"Soll die App auf dem Handy funktionieren?", hint:"Responsive", options:[
+    ["Ja, Handy zuerst", "mobile_first", "Für mobile Apps"],
+    ["Ja, Desktop zuerst", "desktop_first", "Für Büro-Apps"],
+    ["Nur Desktop", "desktop_only", "Einfachste Option"]
+  ]},
+  {phase:5, phaseName:"Oberfläche", id:"dark_mode", q:"Dark Mode (dunkles Design)?", hint:"Dunkles Farbschema", options:[
+    ["Ja, mit Umschalter", "yes", "Nutzer kann wählen"],
+    ["Nein, nur helles Design", "no", "Einfachste Option"],
+    ["Automatisch", "auto", "Kein Button nötig"]
+  ]},
+  {phase:6, phaseName:"Extras", id:"integrations", q:"Braucht die App externe Dienste?", hint:"Zahlungen, E-Mails, Dateispeicher", options:[
+    ["Keine", "none", "Nur die App selbst"],
+    ["E-Mail-Versand", "email", "Für Benachrichtigungen"],
+    ["Zahlungen (Stripe)", "stripe", "Für kostenpflichtige Apps"]
+  ]},
+  {phase:6, phaseName:"Extras", id:"i18n", q:"Mehrsprachig?", hint:"Internationalisierung", options:[
+    ["Nur Deutsch", "de", "Einfachste Option"],
+    ["Deutsch + Englisch", "de,en", "Für internationale Nutzer"],
+    ["Englisch only", "en", "Für englischsprachige Zielgruppe"]
+  ]},
+  {phase:7, phaseName:"Größe & Sicherheit", id:"expected_users", q:"Wie viele Nutzer erwartest du?", hint:"Beeinflusst die Infrastruktur", options:[
+    ["Unter 100", "100", "Kleiner Server reicht"],
+    ["100-1.000", "1000", "Standard-Setup"],
+    ["Über 1.000", "10000", "Skalierbare Infrastruktur nötig"]
+  ]},
+  {phase:7, phaseName:"Größe & Sicherheit", id:"compliance", q:"Datenschutz-Anforderungen?", hint:"DSGVO = EU-Datenschutz", options:[
+    ["DSGVO (Standard für EU)", "gdpr", "Für Apps mit EU-Nutzern"],
+    ["DSGVO + keine besonderen Anforderungen", "gdpr_basic", "Einfachste Option"],
+    ["HIPAA (Gesundheitsdaten)", "hipaa", "Für medizinische Apps"]
+  ]}
+];
+
+let currentQ = 0;
+let answers = {};
+let selectedOption = null;
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function startBlueprint() {
+  currentQ = 0;
+  answers = {};
+  showQuestion();
+  showScreen('question-screen');
+}
+
+function showQuestion() {
+  const q = questions[currentQ];
+  document.getElementById('phase-info').textContent = `Phase ${q.phase}: ${q.phaseName} (${currentQ+1}/${questions.length})`;
+  document.getElementById('question-text').textContent = q.q;
+  document.getElementById('question-hint').textContent = q.hint;
+  document.getElementById('progress').style.width = (currentQ / questions.length * 100) + '%';
+  document.getElementById('answer-input').value = '';
+  selectedOption = null;
+  document.getElementById('next-btn').disabled = true;
+
+  const container = document.getElementById('options-container');
+  container.innerHTML = '';
+  if (q.options) {
+    q.options.forEach(opt => {
+      const div = document.createElement('div');
+      div.className = 'option';
+      div.innerHTML = `<div class="label">${opt[0]}</div><div class="desc">${opt[2]}</div>`;
+      div.onclick = () => selectOption(opt[1], div);
+      container.appendChild(div);
+    });
+  }
+}
+
+function selectOption(value, el) {
+  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedOption = value;
+  document.getElementById('answer-input').value = value;
+  document.getElementById('next-btn').disabled = false;
+}
+
+document.getElementById('answer-input').addEventListener('input', function() {
+  if (this.value.trim()) {
+    document.getElementById('next-btn').disabled = false;
+    selectedOption = this.value.trim();
+  } else if (!selectedOption) {
+    document.getElementById('next-btn').disabled = true;
+  }
+});
+
+function submitAnswer() {
+  const q = questions[currentQ];
+  const answer = document.getElementById('answer-input').value.trim() || selectedOption;
+  if (!answer) return;
+  answers[q.id] = answer;
+  currentQ++;
+  if (currentQ < questions.length) {
+    showQuestion();
+  } else {
+    startLoading();
+  }
+}
+
+function startLoading() {
+  showScreen('loading-screen');
+  const steps = [
+    "Blueprint wird erstellt...",
+    "Datenmodell wird generiert...",
+    "API-Endpunkte werden definiert...",
+    "Authentifizierung wird konfiguriert...",
+    "Frontend wird vorbereitet...",
+    "Integrationen werden eingerichtet...",
+    "Nicht-funktionale Anforderungen werden gesetzt...",
+    "Blueprint wird validiert...",
+    "App wird kompiliert...",
+    "APK wird generiert..."
+  ];
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i < steps.length) {
+      document.getElementById('loading-text').textContent = steps[i];
+      document.getElementById('loading-progress').style.width = ((i+1)/steps.length*100) + '%';
+      i++;
+    } else {
+      clearInterval(interval);
+      showProjects();
+    }
+  }, 800);
+}
+
+function showProjects() {
+  showScreen('projects-screen');
+  const projects = [
+    {name: answers.name || 'Meine App', desc: answers.description || 'Keine Beschreibung', status: 'Fertig', apk: '#'},
+  ];
+  const list = document.getElementById('projects-list');
+  list.innerHTML = '';
+  projects.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.innerHTML = `
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <p style="color:#0f0;">Status: ${p.status}</p>
+      <a href="${p.apk}" class="download-btn" download>APK HERUNTERLADEN</a>
+      <button class="chat-btn" onclick="openChat('${p.name}')">AI CHAT</button>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function restart() {
+  currentQ = 0;
+  answers = {};
+  showScreen('start-screen');
+}
+
+let currentChatProject = '';
+function openChat(projectName) {
+  currentChatProject = projectName;
+  document.getElementById('chat-project-name').textContent = projectName;
+  document.getElementById('chat-overlay').classList.add('active');
+  document.getElementById('chat-messages').innerHTML = '<div class="chat-msg ai">Hallo! Ich bin dein AI-Assistent. Sag mir was du an "' + projectName + '" ändern möchtest.</div>';
+}
+function closeChat() {
+  document.getElementById('chat-overlay').classList.remove('active');
+}
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML += '<div class="chat-msg user">' + msg + '</div>';
+  input.value = '';
+  // Simulate AI response
+  setTimeout(() => {
+    msgs.innerHTML += '<div class="chat-msg ai">Verstanden! Ich werde "' + msg + '" umsetzen. Die App wird neu generiert und zum Download bereitgestellt.</div>';
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 1000);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+document.getElementById('chat-input').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') sendChat();
+});
+</script>
+
+<!-- AI Chat Overlay -->
+<div class="chat-overlay" id="chat-overlay">
+  <div class="chat-window">
+    <div class="chat-header">
+      <span>AI Chat — <span id="chat-project-name"></span></span>
+      <button class="btn" style="padding:5px 15px; font-size:0.9rem;" onclick="closeChat()">X</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg ai">Hallo! Ich bin dein AI-Assistent. Sag mir was du an deiner App ändern möchtest und ich werde es umsetzen.</div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" class="input-field" id="chat-input" placeholder="Änderung beschreiben..." style="margin-bottom:0;">
+      <button class="btn" style="padding:10px 20px;" onclick="sendChat()">SENDEN</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

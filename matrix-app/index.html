@@ -35,6 +35,19 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
 .download-btn:hover { background: #0a0; }
 .hint { font-size: 0.85rem; color: #0a0; margin-bottom: 15px; font-style: italic; }
 .phase { font-size: 0.9rem; color: #0a0; margin-bottom: 10px; }
+
+.chat-btn { display: inline-block; padding: 10px 20px; background: #003300; color: #0f0; border: 1px solid #0f0; border-radius: 5px; font-weight: bold; cursor: pointer; margin-left: 10px; }
+.chat-btn:hover { background: #006600; box-shadow: 0 0 10px #0f0; }
+.chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; }
+.chat-overlay.active { display: flex; }
+.chat-window { width: 90%; max-width: 500px; height: 70%; background: #001100; border: 1px solid #0f0; border-radius: 10px; display: flex; flex-direction: column; }
+.chat-header { padding: 15px; border-bottom: 1px solid #0f0; display: flex; justify-content: space-between; align-items: center; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 15px; }
+.chat-msg { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 80%; }
+.chat-msg.ai { background: rgba(0,50,0,0.5); border: 1px solid #0a0; align-self: flex-start; }
+.chat-msg.user { background: rgba(0,100,0,0.5); border: 1px solid #0f0; align-self: flex-end; margin-left: auto; }
+.chat-input-area { padding: 15px; border-top: 1px solid #0f0; display: flex; gap: 10px; }
+.chat-input-area input { flex: 1; }
 </style>
 </head>
 <body>
@@ -290,6 +303,7 @@ function showProjects() {
       <p>${p.desc}</p>
       <p style="color:#0f0;">Status: ${p.status}</p>
       <a href="${p.apk}" class="download-btn" download>APK HERUNTERLADEN</a>
+      <button class="chat-btn" onclick="openChat('${p.name}')">AI CHAT</button>
     `;
     list.appendChild(card);
   });
@@ -300,6 +314,51 @@ function restart() {
   answers = {};
   showScreen('start-screen');
 }
+
+let currentChatProject = '';
+function openChat(projectName) {
+  currentChatProject = projectName;
+  document.getElementById('chat-project-name').textContent = projectName;
+  document.getElementById('chat-overlay').classList.add('active');
+  document.getElementById('chat-messages').innerHTML = '<div class="chat-msg ai">Hallo! Ich bin dein AI-Assistent. Sag mir was du an "' + projectName + '" ändern möchtest.</div>';
+}
+function closeChat() {
+  document.getElementById('chat-overlay').classList.remove('active');
+}
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML += '<div class="chat-msg user">' + msg + '</div>';
+  input.value = '';
+  // Simulate AI response
+  setTimeout(() => {
+    msgs.innerHTML += '<div class="chat-msg ai">Verstanden! Ich werde "' + msg + '" umsetzen. Die App wird neu generiert und zum Download bereitgestellt.</div>';
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 1000);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+document.getElementById('chat-input').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') sendChat();
+});
 </script>
+
+<!-- AI Chat Overlay -->
+<div class="chat-overlay" id="chat-overlay">
+  <div class="chat-window">
+    <div class="chat-header">
+      <span>AI Chat — <span id="chat-project-name"></span></span>
+      <button class="btn" style="padding:5px 15px; font-size:0.9rem;" onclick="closeChat()">X</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg ai">Hallo! Ich bin dein AI-Assistent. Sag mir was du an deiner App ändern möchtest und ich werde es umsetzen.</div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" class="input-field" id="chat-input" placeholder="Änderung beschreiben..." style="margin-bottom:0;">
+      <button class="btn" style="padding:10px 20px;" onclick="sendChat()">SENDEN</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

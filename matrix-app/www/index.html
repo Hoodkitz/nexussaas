@@ -250,17 +250,10 @@ async function submitAnswer() {
     
     // Set up next question from follow-ups - use first one, store rest
     if (data.follow_up_questions && data.follow_up_questions.length > 0 && questionCount < MAX_QUESTIONS) {
-      const nextQ = data.follow_up_questions[0];
-      // Store remaining follow-ups for later
+      // Store ALL follow-ups in pending
       if (!window.pendingQuestions) window.pendingQuestions = [];
-      window.pendingQuestions = window.pendingQuestions.concat(data.follow_up_questions.slice(1));
-      currentQuestion = {
-        id: nextQ.id || ('q_' + questionCount),
-        q: nextQ.q,
-        hint: nextQ.hint || '',
-        type: nextQ.type || 'text',
-        options: nextQ.options || null
-      };
+      window.pendingQuestions = window.pendingQuestions.concat(data.follow_up_questions);
+      // Don't set currentQuestion here - showQuestion will pick from pending
       document.getElementById('next-btn').disabled = false;
       document.getElementById('next-btn').onclick = function() {
         researchDiv.classList.remove('active');

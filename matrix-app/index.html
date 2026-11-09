@@ -52,17 +52,50 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
 .chat-msg.user { background: rgba(0,100,0,0.5); border: 1px solid #0f0; margin-left: auto; }
 .chat-input-area { padding: 15px; border-top: 1px solid #0f0; display: flex; gap: 10px; }
 .chat-input-area input { flex: 1; }
+.auth-form { max-width: 400px; margin: 0 auto; }
+.auth-form input { margin-bottom: 15px; }
+.auth-switch { color: #0a0; font-size: 0.9rem; margin-top: 15px; cursor: pointer; }
+.auth-switch:hover { color: #0f0; }
+.user-info { position: fixed; top: 10px; right: 10px; font-size: 0.8rem; color: #0a0; z-index: 2; }
 </style>
 </head>
 <body>
 <canvas id="matrix-bg"></canvas>
 <div class="container">
-  <div id="start-screen" class="screen active">
+  <!-- Login Screen -->
+  <div id="login-screen" class="screen active">
     <h1>NEXUSSAAS</h1>
     <p style="margin-bottom:30px; color:#0a0;">KI-gestützter Blueprint Generator</p>
-    <button class="btn" onclick="startBlueprint()">START</button>
+    <div class="auth-form">
+      <input type="text" class="input-field" id="login-user" placeholder="Benutzername">
+      <input type="password" class="input-field" id="login-pass" placeholder="Passwort">
+      <button class="btn" onclick="doLogin()">LOGIN</button>
+      <div class="auth-switch" onclick="showRegister()">Noch kein Account? Registrieren</div>
+    </div>
   </div>
 
+  <!-- Register Screen -->
+  <div id="register-screen" class="screen">
+    <h1>NEXUSSAAS</h1>
+    <p style="margin-bottom:30px; color:#0a0;">Neuen Account erstellen</p>
+    <div class="auth-form">
+      <input type="text" class="input-field" id="reg-user" placeholder="Benutzername">
+      <input type="password" class="input-field" id="reg-pass" placeholder="Passwort">
+      <input type="password" class="input-field" id="reg-pass2" placeholder="Passwort wiederholen">
+      <button class="btn" onclick="doRegister()">REGISTRIEREN</button>
+      <div class="auth-switch" onclick="showLogin()">Schon ein Account? Login</div>
+    </div>
+  </div>
+
+  <!-- Dashboard Screen -->
+  <div id="dashboard-screen" class="screen">
+    <h1>PROJEKTE</h1>
+    <div id="projects-list"></div>
+    <button class="btn" style="margin-top:20px;" onclick="startBlueprint()">NEUES PROJEKT</button>
+    <button class="btn" style="margin-top:10px; background:#300; color:#f00;" onclick="doLogout()">LOGOUT</button>
+  </div>
+
+  <!-- Question Screen -->
   <div id="question-screen" class="screen">
     <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
     <div class="question" id="question-text"></div>
@@ -80,12 +113,6 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
     <h2>ERSTELLE APP...</h2>
     <div class="progress-bar"><div class="progress-fill" id="loading-progress"></div></div>
     <div class="loading-text" id="loading-text">Initialisiere...</div>
-  </div>
-
-  <div id="projects-screen" class="screen">
-    <h1>PROJEKTE</h1>
-    <div id="projects-list"></div>
-    <button class="btn" style="margin-top:20px;" onclick="restart()">NEUES PROJEKT</button>
   </div>
 </div>
 
@@ -132,21 +159,97 @@ window.pendingQuestions = [];
 let answers = {};
 let questionCount = 0;
 const MAX_QUESTIONS = 20;
+let currentUser = null;
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
+function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  if (!user || !pass) { alert('Bitte Benutzername und Passwort eingeben'); return; }
+  const users = JSON.parse(localStorage.getItem('nexus_users') || '{}');
+  if (users[user] && users[user] === pass) {
+    currentUser = user;
+    localStorage.setItem('nexus_current_user', user);
+    showDashboard();
+  } else {
+    alert('Falsche Anmeldedaten');
+  }
+}
+
+function doRegister() {
+  const user = document.getElementById('reg-user').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
+  if (!user || !pass) { alert('Bitte alle Felder ausfüllen'); return; }
+  if (pass !== pass2) { alert('Passwörter stimmen nicht überein'); return; }
+  const users = JSON.parse(localStorage.getItem('nexus_users') || '{}');
+  if (users[user]) { alert('Benutzername existiert bereits'); return; }
+  users[user] = pass;
+  localStorage.setItem('nexus_users', JSON.stringify(users));
+  currentUser = user;
+  localStorage.setItem('nexus_current_user', user);
+  showDashboard();
+}
+
+function doLogout() {
+  currentUser = null;
+  localStorage.removeItem('nexus_current_user');
+  showScreen('login-screen');
+}
+
+function showRegister() { showScreen('register-screen'); }
+function showLogin() { showScreen('login-screen'); }
+
+function getProjects() {
+  if (!currentUser) return [];
+  const all = JSON.parse(localStorage.getItem('nexus_projects') || '{}');
+  return all[currentUser] || [];
+}
+
+function saveProject(project) {
+  if (!currentUser) return;
+  const all = JSON.parse(localStorage.getItem('nexus_projects') || '{}');
+  if (!all[currentUser]) all[currentUser] = [];
+  all[currentUser].push(project);
+  localStorage.setItem('nexus_projects', JSON.stringify(all));
+}
+
+function showDashboard() {
+  const projects = getProjects();
+  const list = document.getElementById('projects-list');
+  list.innerHTML = '';
+  if (projects.length === 0) {
+    list.innerHTML = '<p style="color:#0a0;">Noch keine Projekte. Erstelle dein erstes!</p>';
+  }
+  projects.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.innerHTML = `
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <p style="color:#0f0;">Status: ${p.status}</p>
+      <p style="color:#0a0; font-size:0.8rem;">${p.answers} Antworten</p>
+      <a href="#" class="download-btn" download>APK HERUNTERLADEN</a>
+      <button class="chat-btn" onclick="openChat('${p.name}')">AI CHAT</button>
+    `;
+    list.appendChild(card);
+  });
+  showScreen('dashboard-screen');
+}
+
 async function startBlueprint() {
   answers = {};
   questionCount = 0;
+  window.pendingQuestions = [];
   await fetchNextQuestion();
   showScreen('question-screen');
 }
 
 async function fetchNextQuestion() {
-  // Check pending questions first
   if (window.pendingQuestions && window.pendingQuestions.length > 0) {
     const nextQ = window.pendingQuestions.shift();
     currentQuestion = {
@@ -159,12 +262,11 @@ async function fetchNextQuestion() {
     showQuestion();
     return;
   }
-  // First question is always the app description
   if (questionCount === 0) {
     currentQuestion = {
       id: 'app_description',
       q: 'Was soll deine App machen? Beschreibe in eigenen Worten.',
-      hint: 'z.B. "Ein Dienstplan für die Bundeswehr" oder "Ein Tool um Aufgaben im Team zu verwalten"',
+      hint: "z.B. 'Ein Dienstplan für die Bundeswehr' oder 'Ein Tool um Aufgaben im Team zu verwalten'",
       type: 'text'
     };
   }
@@ -172,17 +274,6 @@ async function fetchNextQuestion() {
 }
 
 function showQuestion() {
-  // Check pending questions first
-  if (window.pendingQuestions && window.pendingQuestions.length > 0) {
-    const nextQ = window.pendingQuestions.shift();
-    currentQuestion = {
-      id: nextQ.id || ('q_' + questionCount),
-      q: nextQ.q,
-      hint: nextQ.hint || '',
-      type: nextQ.type || 'text',
-      options: nextQ.options || null
-    };
-  }
   document.getElementById('question-text').textContent = currentQuestion.q;
   document.getElementById('question-hint').textContent = currentQuestion.hint;
   document.getElementById('progress').style.width = (questionCount / MAX_QUESTIONS * 100) + '%';
@@ -190,6 +281,7 @@ function showQuestion() {
   document.getElementById('ai-research').classList.remove('active');
   document.getElementById('next-btn').disabled = true;
   document.getElementById('next-btn').onclick = submitAnswer;
+  document.getElementById('next-btn').textContent = 'WEITER';
 
   const container = document.getElementById('options-container');
   container.innerHTML = '';
@@ -224,7 +316,6 @@ async function submitAnswer() {
   answers[currentQuestion.id] = answer;
   questionCount++;
   
-  // Show AI research
   const researchDiv = document.getElementById('ai-research');
   const researchContent = document.getElementById('research-content');
   researchDiv.classList.add('active');
@@ -240,31 +331,24 @@ async function submitAnswer() {
       html += '<div class="research-item">🔗 Quellen: ' + data.sources.join(', ') + '</div>';
     }
     if (data.follow_up_questions && data.follow_up_questions.length > 0) {
-      html += '<div class="research-item" style="margin-top:10px; color:#0f0;">❓ Folgefragen generiert:</div>';
-      data.follow_up_questions.forEach(fq => {
-        html += '<div class="research-item" style="margin-left:20px;">• ' + fq.q + '</div>';
-      });
+      html += '<div class="research-item" style="margin-top:10px; color:#0f0;">❓ ' + data.follow_up_questions.length + ' Folgefragen generiert</div>';
     }
     html += '<div class="research-item" style="margin-top:10px;">✅ Wird in Blueprint und App-Erstellung einfließen.</div>';
     researchContent.innerHTML = html;
     
-    // Set up next question from follow-ups - use first one, store rest
     if (data.follow_up_questions && data.follow_up_questions.length > 0 && questionCount < MAX_QUESTIONS) {
-      // Store ALL follow-ups in pending
       if (!window.pendingQuestions) window.pendingQuestions = [];
       window.pendingQuestions = window.pendingQuestions.concat(data.follow_up_questions);
-      // Don't set currentQuestion here - showQuestion will pick from pending
       document.getElementById('next-btn').disabled = false;
       document.getElementById('next-btn').onclick = function() {
         researchDiv.classList.remove('active');
         showQuestion();
       };
     } else {
-      // No more follow-ups or max reached
       document.getElementById('next-btn').disabled = false;
       document.getElementById('next-btn').onclick = function() {
         researchDiv.classList.remove('active');
-        startLoading();
+        finishBlueprint();
       };
       document.getElementById('next-btn').textContent = 'FERTIG';
     }
@@ -278,10 +362,21 @@ async function submitAnswer() {
       if (questionCount < MAX_QUESTIONS) {
         fetchNextQuestion();
       } else {
-        startLoading();
+        finishBlueprint();
       }
     };
   }
+}
+
+function finishBlueprint() {
+  const projectName = answers.app_description || 'Meine App';
+  saveProject({
+    name: projectName,
+    desc: answers.app_description || '',
+    status: 'Fertig',
+    answers: Object.keys(answers).length
+  });
+  showDashboard();
 }
 
 function startLoading() {
@@ -307,33 +402,9 @@ function startLoading() {
       i++;
     } else {
       clearInterval(interval);
-      showProjects();
+      finishBlueprint();
     }
   }, 800);
-}
-
-function showProjects() {
-  showScreen('projects-screen');
-  const projectName = answers.app_description || 'Meine App';
-  const list = document.getElementById('projects-list');
-  list.innerHTML = '';
-  const card = document.createElement('div');
-  card.className = 'project-card';
-  card.innerHTML = `
-    <h3>${projectName}</h3>
-    <p>Erstellt aus ${Object.keys(answers).length} Blueprint-Antworten</p>
-    <p style="color:#0f0;">Status: Fertig</p>
-    <a href="#" class="download-btn" download>APK HERUNTERLADEN</a>
-    <button class="chat-btn" onclick="openChat('${projectName}')">AI CHAT</button>
-  `;
-  list.appendChild(card);
-}
-
-function restart() {
-  currentQuestion = null;
-  answers = {};
-  questionCount = 0;
-  showScreen('start-screen');
 }
 
 let currentChatProject = '';
@@ -361,6 +432,15 @@ function sendChat() {
 }
 document.getElementById('chat-input').addEventListener('keypress', function(e) {
   if (e.key === 'Enter') sendChat();
+});
+
+// Auto-login if session exists
+window.addEventListener('load', function() {
+  const savedUser = localStorage.getItem('nexus_current_user');
+  if (savedUser) {
+    currentUser = savedUser;
+    showDashboard();
+  }
 });
 </script>
 </body>

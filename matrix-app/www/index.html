@@ -48,6 +48,13 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
 .chat-msg.user { background: rgba(0,100,0,0.5); border: 1px solid #0f0; align-self: flex-end; margin-left: auto; }
 .chat-input-area { padding: 15px; border-top: 1px solid #0f0; display: flex; gap: 10px; }
 .chat-input-area input { flex: 1; }
+
+.ai-research { background: rgba(0,40,0,0.6); border: 1px solid #0a0; border-radius: 5px; padding: 15px; margin: 15px 0; font-size: 0.9rem; color: #0a0; display: none; }
+.ai-research.active { display: block; }
+.ai-research h4 { color: #0f0; margin-bottom: 8px; }
+.ai-research .research-item { margin: 5px 0; padding-left: 10px; border-left: 2px solid #0a0; }
+.ai-analyzing { color: #0f0; font-style: italic; animation: blink 1s infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 </style>
 </head>
 <body>
@@ -65,6 +72,10 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
     <div class="phase" id="phase-info"></div>
     <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
     <div class="question" id="question-text"></div>
+<div class="ai-research" id="ai-research">
+  <h4>🤖 KI-ANALYSE</h4>
+  <div id="research-content"></div>
+</div>
     <div class="hint" id="question-hint"></div>
     <div class="options" id="options-container"></div>
     <input type="text" class="input-field" id="answer-input" placeholder="Oder eigene Antwort eingeben...">
@@ -253,13 +264,85 @@ function submitAnswer() {
   const answer = document.getElementById('answer-input').value.trim() || selectedOption;
   if (!answer) return;
   answers[q.id] = answer;
-  currentQ++;
-  if (currentQ < questions.length) {
-    showQuestion();
-  } else {
-    startLoading();
-  }
+  
+  // Show AI research
+  const researchDiv = document.getElementById('ai-research');
+  const researchContent = document.getElementById('research-content');
+  researchDiv.classList.add('active');
+  researchContent.innerHTML = '<span class="ai-analyzing">🔍 KI recherchiert die Bedeutung deiner Antwort...</span>';
+  document.getElementById('next-btn').disabled = true;
+  
+  // Simulate AI research (in production: call backend API)
+  setTimeout(() => {
+    const research = generateResearch(q.id, answer);
+    researchContent.innerHTML = research;
+    document.getElementById('next-btn').disabled = false;
+    document.getElementById('next-btn').onclick = function() {
+      researchDiv.classList.remove('active');
+      currentQ++;
+      if (currentQ < questions.length) {
+        showQuestion();
+      } else {
+        startLoading();
+      }
+    };
+  }, 1500);
 }
+
+function generateResearch(qId, answer) {
+  const researchDB = {
+    target_audience: {
+      internal_team: 'Interne Tools brauchen keine Registrierung, keine Zahlungen, keine Skalierung. Einfachste Infrastruktur.',
+      small_business: 'Kleine Unternehmen brauchen Login, Rollen, einfache Datenbank. Stripe für Zahlungen optional.',
+      public_b2c: 'Öffentliche Apps brauchen vollständige Registrierung, Captcha, Rate-Limiting, Skalierung, DSGVO-konform.'
+    },
+    mvp_features: {
+      view_create: 'Minimaler Scope: Nur Lesen + Erstellen. Schnellster Weg zum MVP.',
+      crud: 'Standard-CRUD: Erstellen, Lesen, Bearbeiten, Löschen. Empfohlen für die meisten Apps.',
+      crud_search: 'CRUD + Suche + Filter. Mehr Komfort, aber mehr Komplexität.'
+    },
+    entities: {
+      simple: '1-2 Objekte: Einfache Datenbank, wenige API-Endpunkte, schnelle Entwicklung.',
+      medium: '3-5 Objekte: Standard-App-Komplexität, Beziehungen zwischen Objekten.',
+      complex: '6+ Objekte: Größeres Projekt, mehr Planung nötig, möglicherweise Microservices.'
+    },
+    tenant_scoped: {
+      no: 'Alle Daten öffentlich: Einfachste Option, keine Multi-Tenant-Logik.',
+      per_user: 'Pro Nutzer getrennt: Standard für SaaS, braucht User-Tabelle + Filter.',
+      per_org: 'Pro Firma getrennt: B2B-SaaS, braucht Organisationen, Rollen, RLS.'
+    },
+    auth_method: {
+      email_password: 'E-Mail + Passwort: Keine externen Dienste, aber Passwort-Reset, Hashing, Session-Management nötig.',
+      oauth_google: 'Google Login: Braucht Google Console Setup, aber kein Passwort-Management.',
+      magic_link: 'Magic Link: Kein Passwort, aber E-Mail-Service (Resend/SendGrid) nötig.'
+    },
+    frontend: {
+      react: 'React: Beste Wahl für komplexe UIs, große Community, viel Dokumentation.',
+      vue: 'Vue: Einfacher Einstieg, gute Dokumentation, weniger Boilerplate.',
+      none: 'Nur API: Für Backend-Services, keine UI nötig.'
+    },
+    integrations: {
+      none: 'Keine externen Dienste: Einfachste Option, keine API-Keys nötig.',
+      email: 'E-Mail-Versand: Braucht E-Mail-Service (Resend, SendGrid, SES), Templates.',
+      stripe: 'Zahlungen: Braucht Stripe Account, Webhooks, Subscription-Logik.'
+    },
+    expected_users: {
+      '100': 'Unter 100 Nutzer: Kleiner Server (1 vCPU, 1GB RAM) reicht.',
+      '1000': '100-1.000 Nutzer: Standard-Setup (2 vCPU, 2GB RAM), PostgreSQL reicht.',
+      '10000': 'Über 1.000 Nutzer: Skalierbare Infrastruktur (Load Balancer, Redis, PostgreSQL mit Replikation).'
+    }
+  };
+  
+  const r = researchDB[qId] && researchDB[qId][answer];
+  if (r) {
+    return '<div class="research-item">📊 ' + r + '</div>' +
+           '<div class="research-item">🔗 Quellen: NexusSaaS Blueprint Engine, DSGVO-Guidelines, Best-Practice-Dokumentation</div>' +
+           '<div class="research-item">✅ Diese Information wird in die Blueprint-Erstellung und App-Generierung einfließen.</div>';
+  }
+  return '<div class="research-item">📊 Antwort gespeichert: ' + answer + '</div>' +
+         '<div class="research-item">✅ Diese Information wird in die Blueprint-Erstellung und App-Generierung einfließen.</div>';
+}
+
 
 function startLoading() {
   showScreen('loading-screen');

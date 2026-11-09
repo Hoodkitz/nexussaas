@@ -63,6 +63,12 @@ Nur JSON, keine anderen Texte."""
     # Try to parse JSON from response - handle nested JSON strings
     try:
         # Find the outermost JSON
+        # Strip markdown code blocks
+        response = response.strip()
+        if response.startswith('```'):
+            response = response.split('```')[1]
+            if response.startswith('json'):
+                response = response[4:]
         start = response.find('{')
         end = response.rfind('}') + 1
         if start >= 0 and end > start:

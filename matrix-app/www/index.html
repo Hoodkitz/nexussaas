@@ -128,6 +128,7 @@ setInterval(drawMatrix, 33);
 
 const API_URL = 'https://comfort-posts-expenditures-mailto.trycloudflare.com/api/v1';
 let currentQuestion = null;
+window.pendingQuestions = [];
 let answers = {};
 let questionCount = 0;
 const MAX_QUESTIONS = 20;
@@ -223,10 +224,11 @@ async function submitAnswer() {
     html += '<div class="research-item" style="margin-top:10px;">✅ Wird in Blueprint und App-Erstellung einfließen.</div>';
     researchContent.innerHTML = html;
     
-    // Set up next question from follow-ups
+    // Set up next question from follow-ups - use first one, store rest
     if (data.follow_up_questions && data.follow_up_questions.length > 0 && questionCount < MAX_QUESTIONS) {
-      // Use first follow-up as next question
       const nextQ = data.follow_up_questions[0];
+      // Store remaining follow-ups for later
+      window.pendingQuestions = data.follow_up_questions.slice(1);
       currentQuestion = {
         id: nextQ.id || ('q_' + questionCount),
         q: nextQ.q,

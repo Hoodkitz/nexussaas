@@ -45,7 +45,7 @@ async def research_answer(question_id: str = Query(...), answer: str = Query(...
 Recherchiere:
 1. Was bedeutet diese Antwort für die App-Erstellung?
 2. Welche Daten/Quellen/Vorschriften sind relevant?
-3. Welche 3-5 spezifischen Folgefragen sollten gestellt werden, um die App besser zu verstehen?
+3. Welche 6 spezifischen Folgefragen (mit Fragezeichen) sollten gestellt werden? Generiere 6 echte Fragen die mit ? enden. NICHT allgemeine Fragen.
 
 Antworte im JSON-Format:
 {{
@@ -65,37 +65,54 @@ Nur JSON, keine anderen Texte."""
         # Find the outermost JSON
         # Strip markdown code blocks
         response = response.strip()
-        if response.startswith('```'):
-            response = response.split('```')[1]
+        if '```' in response:
+            parts = response.split('```')
+            if len(parts) >= 2:
+                response = parts[1]
             if response.startswith('json'):
                 response = response[4:]
+        response = response.strip()
         start = response.find('{')
         end = response.rfind('}') + 1
         if start >= 0 and end > start:
             json_str = response[start:end]
             data = json.loads(json_str)
             
-            # The LLM might return research as a JSON string - parse it
+            # The LLM might return research as a JSON string - parse it (one level only)
             research_raw = data.get("research", "")
+            follow_ups = data.get("follow_up_questions", [])
+            sources = data.get("sources", [])
+            
             if isinstance(research_raw, str) and research_raw.strip().startswith('{'):
                 try:
                     inner = json.loads(research_raw)
-                    research = inner.get("research", research_raw)
-                    sources = inner.get("sources", data.get("sources", []))
-                    follow_ups = inner.get("follow_up_questions", data.get("follow_up_questions", []))
+                    # Extract research text (don't recurse)
+                    r = inner.get("research", "")
+                    if isinstance(r, str) and not r.strip().startswith('{'):
+                        research = r
+                    else:
+                        research = research_raw
+                    if not sources:
+                        sources = inner.get("sources", [])
+                    if not follow_ups:
+                        follow_ups = inner.get("follow_up_questions", [])
                 except json.JSONDecodeError:
                     research = research_raw
-                    sources = data.get("sources", [])
-                    follow_ups = data.get("follow_up_questions", [])
             else:
                 research = research_raw
-                sources = data.get("sources", [])
-                follow_ups = data.get("follow_up_questions", [])
             
-            # Clean up follow-up questions
+            if not research:
+                research = "Recherche abgeschlossen"
+            
+            # Clean up follow-up questions - only actual questions
             clean_followups = []
             for fq in follow_ups:
                 if isinstance(fq, dict) and fq.get("q"):
+                    q_text = fq.get("q", "").strip()
+                    # Ensure it's a real question (contains ? or starts with question word)
+                    if '?' not in q_text and not any(q_text.lower().startswith(w) for w in ['wie', 'was', 'welche', 'soll', 'braucht', 'gibt', 'moechtest', 'willst']):
+                        q_text = q_text + '?'
+                    fq["q"] = q_text
                     clean_followups.append({
                         "id": fq.get("id", "fq_" + str(len(clean_followups))),
                         "q": fq.get("q", ""),

@@ -9,7 +9,7 @@ def generate_ddl(blueprint: dict) -> str:
         for field in entity.get("fields", []):
             lines.append(f"  {field} TEXT,")
         lines.append("  tenant_id UUID NOT NULL,")
-        lines.append("  created_at TIMESTAMPTZ DEFAULT now(),")
+        lines.append("  created_at TIMESTAMPTZ DEFAULT now()")
         lines.append(");")
         lines.append("")
     return "\n".join(lines)

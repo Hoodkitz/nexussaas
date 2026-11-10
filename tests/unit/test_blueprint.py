@@ -18,7 +18,7 @@ def test_invalid_blueprint():
 def test_ddl_generation():
     bp = {"entities": [{"name": "User", "fields": ["email"]}]}
     ddl = generate_ddl(bp)
-    assert "CREATE TABLE user" in ddl.lower() or "CREATE TABLE User" in ddl
+    assert "create table user" in ddl.lower()
 
 def test_code_generation():
     bp = {"name": "myapp", "version": "1.0"}

@@ -23,4 +23,6 @@ def validate_blueprint(blueprint: dict) -> tuple[bool, list[str]]:
         errors.append("missing required field: version")
     if "name" in blueprint and not isinstance(blueprint["name"], str):
         errors.append("name must be a string")
+    elif isinstance(blueprint.get("name"), str) and not blueprint["name"].strip():
+        errors.append("name must not be empty")
     return len(errors) == 0, errors

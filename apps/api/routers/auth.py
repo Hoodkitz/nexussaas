@@ -12,11 +12,10 @@ from sqlalchemy.orm import Session
 
 from apps.api.deps import Principal, db_session, get_principal
 from apps.api.schemas.models import LoginIn, MeOut, RegisterIn, SwitchTenantIn, TokenOut, UserOut
-from packages.domain.models import AuditLog, Tenant, TenantMembership, User
+from packages.domain.models import Tenant, TenantMembership, User
 from packages.domain.tenancy import create_tenant
 from packages.observability.metrics import AUTH_EVENTS
 from packages.security import oidc
-from packages.security.audit import audit
 from packages.security.password import hash_password, validate_password_strength, verify_password
 from packages.security.tokens import create_access_token
 from packages.settings import settings
@@ -110,35 +109,6 @@ def logout_all(p: Principal = Depends(get_principal)):
     p.user.token_version += 1
 
 
-def _reset_unverified_access(db: Session, user_id) -> None:
-    """Undo membership grants made while the address was unverified.
-
-    Only memberships this account itself granted (per audit log) are removed. Members
-    added by other principals, other owners, and the user's own memberships stay.
-    """
-    for m in _memberships(db, user_id):
-        set_context(db, m.tenant_id, user_id)
-        granted = {
-            row.target for row in db.query(AuditLog.target).filter(
-                AuditLog.tenant_id == m.tenant_id, AuditLog.actor_id == user_id,
-                AuditLog.action == "member.added")
-        }
-        granted.discard(str(user_id))
-        removed = []
-        for target in granted:
-            o = (db.query(TenantMembership)
-                 .filter(TenantMembership.tenant_id == m.tenant_id, TenantMembership.user_id == uuid.UUID(target))
-                 .one_or_none())
-            if o is not None:
-                db.delete(o)
-                removed.append(target)
-        if removed:
-            audit(db, m.tenant_id, user_id, "auth.unverified_grants_revoked", str(user_id),
-                  {"removed_members": sorted(removed)})
-        db.flush()  # flush under this tenant's RLS context before switching
-    set_context(db, None, user_id)
-
-
 @router.get("/google")
 def google_login():
     if not oidc.is_configured():
@@ -163,15 +133,13 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
     if user is None:
         user = db.query(User).filter(User.email == email).one_or_none()
         if user is not None:
-            # Google proved ownership of the address. If the existing account was never
-            # verified, someone else may have pre-registered it: drop its password and
-            # revoke all sessions so only the verified owner keeps access.
             if not user.email_verified:
-                user.hashed_password = None
-                user.token_version += 1
-                _reset_unverified_access(db, user.id)
+                # Never auto-link to an account whose address was not verified: it may have
+                # been pre-registered by someone else (account pre-hijacking). Fail closed.
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    "Für diese E-Mail existiert bereits ein Passwort-Konto. Bitte mit "
+                                    "Passwort anmelden; Google kann danach nicht automatisch verknüpft werden.")
             user.google_sub = info["sub"]
-            user.email_verified = True
     if user is None:
         _pilot_check(email)
         user = User(id=uuid.uuid4(), email=email, name=info.get("name"), google_sub=info["sub"],

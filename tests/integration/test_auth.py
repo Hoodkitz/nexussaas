@@ -67,35 +67,36 @@ def test_google_callback_rejects_unknown_state(client):
     assert client.get("/api/v1/auth/google/callback", params={"code": "x", "state": "nope"}).status_code == 400
 
 
-def test_google_link_drops_unverified_password(make_account, client, monkeypatch):
-    """Pre-hijacking: a password set by someone else on an unverified account is removed."""
-    from apps.api.routers import auth as auth_router
+def _fake_google(monkeypatch, sub, email):
     from packages.security import oidc
 
-    a = make_account("victim")
-    attacker = make_account("attacker")
-    assert a.post("/api/v1/tenants/current/members", json={"email": attacker.email, "role": "admin"}).status_code == 201
-    # A co-owner tenant created by someone else keeps its other members.
-    other = make_account("other")
-    assert other.post("/api/v1/tenants/current/members", json={"email": a.email, "role": "admin"}).status_code == 201
-    oidc_state = {"verifier": "v", "nonce": "n", "next": None}
-    monkeypatch.setattr(oidc, "consume_state", lambda s: oidc_state)
+    monkeypatch.setattr(oidc, "consume_state", lambda s: {"verifier": "v", "nonce": "n", "next": None})
 
     async def fake_exchange(code, verifier):
         return {"access_token": "x"}
 
     async def fake_info(tok):
-        return {"sub": "google-sub-" + a.email, "email": a.email, "email_verified": True, "name": "V"}
+        return {"sub": sub, "email": email, "email_verified": True, "name": "G"}
 
     monkeypatch.setattr(oidc, "exchange_code", fake_exchange)
     monkeypatch.setattr(oidc, "fetch_userinfo", fake_info)
-    assert auth_router.oidc is oidc
+
+
+def test_google_never_links_unverified_password_account(make_account, client, monkeypatch):
+    """Pre-hijacking: an unverified password account is never merged with a Google identity."""
+    a = make_account("prehijacked")
+    _fake_google(monkeypatch, "sub-" + a.email, a.email)
     r = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
-    assert r.status_code == 200
-    assert a.get("/api/v1/auth/me").status_code == 401  # old sessions revoked
-    assert client.post("/api/v1/auth/login", json={"email": a.email, "password": PASSWORD}).status_code == 401
-    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    members = client.get("/api/v1/tenants/current/members", headers=h).json()
-    assert [m["email"] for m in members] == [a.email]  # attacker grant revoked
-    emails = {m["email"] for m in other.get("/api/v1/tenants/current/members").json()}
-    assert emails == {other.email, a.email}  # grants by others untouched
+    assert r.status_code == 409
+    assert a.get("/api/v1/auth/me").status_code == 200  # nothing changed
+
+
+def test_google_signup_and_relogin(client, monkeypatch):
+    import uuid as _uuid
+
+    email = f"g-{_uuid.uuid4().hex[:8]}@example.com"
+    _fake_google(monkeypatch, "sub-" + email, email)
+    r1 = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
+    r2 = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
+    assert r1.status_code == r2.status_code == 200
+    assert r1.json()["tenant_id"] == r2.json()["tenant_id"] and r1.json()["role"] == "owner"

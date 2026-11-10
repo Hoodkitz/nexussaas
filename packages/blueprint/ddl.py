@@ -48,17 +48,20 @@ def generate_ddl(blueprint: dict) -> str:
                  "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"]
         for f in e["fields"]:
             if f["unique"]:
-                cols.append(f"  CONSTRAINT {_q(f'uq_{t}_{f['name']}')} UNIQUE (tenant_id, {_q(f['name'])})")
+                cname = "uq_" + t + "_" + f["name"]
+                cols.append(f"  CONSTRAINT {_q(cname)} UNIQUE (tenant_id, {_q(f['name'])})")
         out.append(f"CREATE TABLE {_q(t)} (")
         out.append(",\n".join(cols))
         out.append(");")
-        indexes.append(f"CREATE INDEX {_q(f'ix_{t}_tenant')} ON {_q(t)} (tenant_id, created_at);")
+        indexes.append(f"CREATE INDEX {_q('ix_' + t + '_tenant')} ON {_q(t)} (tenant_id, created_at);")
         for f in e["fields"]:
             if f["type"] == "ref":
                 target = tables[f["ref"]]
-                fks.append(f"ALTER TABLE {_q(t)} ADD CONSTRAINT {_q(f'fk_{t}_{f['name']}')} "
+                fk_name = "fk_" + t + "_" + f["name"]
+                fks.append(f"ALTER TABLE {_q(t)} ADD CONSTRAINT {_q(fk_name)} "
                            f"FOREIGN KEY ({_q(f['name'])}) REFERENCES {_q(target)} (id) ON DELETE SET NULL;")
-                indexes.append(f"CREATE INDEX {_q(f'ix_{t}_{f['name']}')} ON {_q(t)} ({_q(f['name'])});")
+                ix_name = "ix_" + t + "_" + f["name"]
+                indexes.append(f"CREATE INDEX {_q(ix_name)} ON {_q(t)} ({_q(f['name'])});")
         out += [
             f"ALTER TABLE {_q(t)} ENABLE ROW LEVEL SECURITY;",
             f"ALTER TABLE {_q(t)} FORCE ROW LEVEL SECURITY;",

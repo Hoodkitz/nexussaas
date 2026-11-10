@@ -243,7 +243,7 @@ def get_tenant_id(x_tenant_id: str = Header(...)) -> uuid.UUID:
     try:
         return uuid.UUID(x_tenant_id)
     except ValueError:
-        raise HTTPException(400, "invalid X-Tenant-ID")
+        raise HTTPException(400, "invalid X-Tenant-ID") from None
 
 
 def get_session(tenant_id: uuid.UUID = Depends(get_tenant_id)) -> Iterator[Session]:

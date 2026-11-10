@@ -135,7 +135,7 @@ def _reset_unverified_access(db: Session, user_id) -> None:
         if removed:
             audit(db, m.tenant_id, user_id, "auth.unverified_grants_revoked", str(user_id),
                   {"removed_members": sorted(removed)})
-    db.flush()
+        db.flush()  # flush under this tenant's RLS context before switching
     set_context(db, None, user_id)
 
 

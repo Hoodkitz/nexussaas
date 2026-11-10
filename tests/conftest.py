@@ -6,6 +6,10 @@ import uuid
 
 import pytest
 
+# Tests use their own database and Redis DB so they never touch the live dev services.
+os.environ.setdefault("DATABASE_URL", "postgresql+psycopg2://nexus_app:nexus_app@localhost:5432/nexussaas_test")
+os.environ.setdefault("MIGRATION_DATABASE_URL", "postgresql+psycopg2://nexussaas:nexussaas@localhost:5432/nexussaas_test")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("RATE_LIMIT_AUTH_PER_MINUTE", "10000")
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "100000")
 os.environ.setdefault("STORAGE_LOCAL_DIR", "/tmp/nexussaas-test-objects")

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.middleware import RequestContextMiddleware
-from apps.api.routers import auth, blueprint, health, tenants
+from apps.api.routers import auth, blueprint, health, jobs, tenants
 from packages.observability.logging import setup_logging
 from packages.settings import settings
 
@@ -21,17 +21,10 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
 
-for r in (health, auth, tenants):
+for r in (health, auth, tenants, jobs):
     app.include_router(r.router)
 app.include_router(blueprint.router, prefix="/api/v1")
 
-try:  # routers added in later phases
-    from apps.api.routers import billing, export, jobs  # noqa: E402
-
-    for r in (jobs, billing, export):
-        app.include_router(r.router)
-except ImportError:  # pragma: no cover
-    pass
 
 
 @app.get("/")

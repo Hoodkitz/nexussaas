@@ -24,7 +24,8 @@ def test_sample_normalizes():
     {"entities": [{"name": "x"}]},
     {"name": "ok", "entities": []},
     {"name": "ok", "entities": [{"name": "class"}]},
-    {"name": "ok", "entities": [{"name": "a; DROP TABLE x"}]},
+    {"name": "ok", "entities": [{"name": "9abc"}]},
+    {"name": "ok", "entities": [{"name": "ä" * 3}]},
     {"name": "ok", "entities": [{"name": "a", "fields": [{"name": "b", "type": "blob"}]}]},
     {"name": "ok", "entities": [{"name": "a", "fields": [{"name": "b", "type": "ref:missing"}]}]},
     {"name": "ok", "entities": [{"name": "item"}, {"name": "items"}]},
@@ -36,6 +37,11 @@ def test_invalid_blueprints(bad):
     assert not ok and errors
     with pytest.raises(BlueprintError):
         normalize_blueprint(bad)
+
+
+def test_hostile_names_are_sanitized():
+    bp = normalize_blueprint({"name": "ok", "entities": [{"name": 'a"; DROP TABLE x; --'}]})
+    assert bp["entities"][0]["name"] == "a_drop_table_x"
 
 
 def test_ddl_has_rls_and_types():

@@ -82,8 +82,8 @@ class Settings:
             self.SECRET_KEY = "dev-only-insecure-secret-key-change-me-0123456789"
         if self.ENV == "production" and len(self.SECRET_KEY) < 32:
             raise RuntimeError("SECRET_KEY must be at least 32 characters")
-        if self.ENV == "production" and self.MAIL_BACKEND not in ("smtp", "console"):
-            raise RuntimeError("MAIL_BACKEND must be smtp (or console) in production")
+        if self.ENV == "production" and self.MAIL_BACKEND != "smtp":
+            raise RuntimeError("MAIL_BACKEND must be smtp in production (console would log verification links)")
 
 
 @lru_cache

@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from packages.settings import settings
 from packages.domain.models import TenantMembership, User
 from packages.security.rbac import has_permission
 from packages.security.tokens import decode_access_token
@@ -46,6 +47,13 @@ def db_session() -> Iterator[Session]:
         db.close()
 
 
+# Routes an unverified user may still reach (to verify, resend, or leave).
+VERIFICATION_EXEMPT_PATHS = frozenset({
+    "/api/v1/auth/me", "/api/v1/auth/resend-verification", "/api/v1/auth/verify-email",
+    "/api/v1/auth/logout-all", "/api/v1/users/me/export", "/api/v1/users/me",
+})
+
+
 def get_principal(request: Request,
                   creds: Optional[HTTPAuthorizationCredentials] = Depends(bearer)) -> Iterator[Principal]:
     if creds is None or creds.scheme.lower() != "bearer":
@@ -62,6 +70,9 @@ def get_principal(request: Request,
         user = db.get(User, user_id)
         if user is None or not user.is_active or user.token_version != claims.get("ver"):
             raise _unauthorized("Token widerrufen")
+        if settings.REQUIRE_VERIFIED_EMAIL and not user.email_verified \
+                and request.url.path not in VERIFICATION_EXEMPT_PATHS:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Bitte zuerst die E-Mail-Adresse bestätigen")
         role = None
         if tenant_id is not None:
             m = (db.query(TenantMembership)

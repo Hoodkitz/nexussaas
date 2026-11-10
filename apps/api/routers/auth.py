@@ -46,7 +46,8 @@ def send_verification_mail(user: User) -> None:
     link = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/auth/verify-email?token={token}"
     get_mailer().send(Mail(
         to=user.email, subject="NexusSaaS: E-Mail-Adresse bestätigen",
-        text=(f"Hallo{(' ' + user.name) if user.name else ''},\n\nbitte bestätige deine E-Mail-Adresse über diesen Link "
+        # No user-supplied text (name) in mail to an unverified address: it could carry phishing content.
+        text=("Hallo,\n\nbitte bestätige deine E-Mail-Adresse für NexusSaaS über diesen Link "
               f"(gültig {settings.EMAIL_VERIFY_HOURS} Stunden):\n\n{link}\n\nFalls du dich nicht registriert hast, "
               "ignoriere diese Nachricht.\n")))
 

@@ -55,3 +55,15 @@ def test_google_links_after_verification(make_account, client, monkeypatch):
     r = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
     assert r.status_code == 200, r.text
     assert a.get("/api/v1/users/me/export").json()["user"]["google_linked"] is True
+
+
+def test_require_verified_email_blocks_until_verified(make_account, client, monkeypatch):
+    from packages.settings import settings
+
+    a = make_account("gate")
+    monkeypatch.setattr(settings, "REQUIRE_VERIFIED_EMAIL", True)
+    assert a.get("/api/v1/auth/me").status_code == 200           # exempt
+    assert a.post("/api/v1/auth/resend-verification").status_code == 202
+    assert a.get("/api/v1/tenants/me").status_code == 403        # gated
+    client.get("/api/v1/auth/verify-email", params={"token": _last_link(a.email)})
+    assert a.get("/api/v1/tenants/me").status_code != 403

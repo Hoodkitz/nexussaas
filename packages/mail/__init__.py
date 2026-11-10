@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from typing import Protocol
@@ -24,6 +25,8 @@ class MailPort(Protocol):
 
 
 class ConsoleMailer:
+    """Development only: prints the full mail (incl. links) to the log. Refused in production."""
+
     def send(self, mail: Mail) -> None:
         log.info("MAIL to=%s subject=%r\n%s", mail.to, mail.subject, mail.text)
         print(f"--- MAIL to {mail.to}: {mail.subject}\n{mail.text}\n---", flush=True)
@@ -42,14 +45,19 @@ class SMTPMailer:
         msg = EmailMessage()
         msg["From"], msg["To"], msg["Subject"] = settings.MAIL_FROM, mail.to, mail.subject
         msg.set_content(mail.text)
+        ctx = ssl.create_default_context()  # verifies the server certificate
         if settings.SMTP_SSL:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20)
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20, context=ctx)
         else:
             server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20)
         with server:
+            encrypted = settings.SMTP_SSL
             if settings.SMTP_STARTTLS and not settings.SMTP_SSL:
-                server.starttls()
+                server.starttls(context=ctx)
+                encrypted = True
             if settings.SMTP_USER:
+                if not encrypted:
+                    raise RuntimeError("SMTP login requires SMTP_SSL or SMTP_STARTTLS (no plaintext credentials)")
                 server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
 

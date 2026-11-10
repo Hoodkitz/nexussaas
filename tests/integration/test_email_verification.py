@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 
-import pytest
 
 from packages.mail import get_mailer
 from tests.conftest import needs_services

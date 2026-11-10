@@ -13,6 +13,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("RATE_LIMIT_AUTH_PER_MINUTE", "10000")
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "100000")
 os.environ.setdefault("STORAGE_LOCAL_DIR", "/tmp/nexussaas-test-objects")
+os.environ.setdefault("MAIL_BACKEND", "recording")
 
 from fastapi.testclient import TestClient  # noqa: E402
 

@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import uuid
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,10 +16,11 @@ from apps.api.deps import Principal, db_session, get_principal
 from apps.api.schemas.models import LoginIn, MeOut, RegisterIn, SwitchTenantIn, TokenOut, UserOut
 from packages.domain.models import Tenant, TenantMembership, User
 from packages.domain.tenancy import create_tenant
+from packages.mail import Mail, get_mailer
 from packages.observability.metrics import AUTH_EVENTS
 from packages.security import oidc
 from packages.security.password import hash_password, validate_password_strength, verify_password
-from packages.security.tokens import create_access_token
+from packages.security.tokens import create_access_token, create_email_token, decode_email_token
 from packages.settings import settings
 from packages.storage.db import set_context
 
@@ -36,6 +39,16 @@ def _token(user: User, tenant_id, role) -> TokenOut:
 def _pilot_check(email: str) -> None:
     if settings.PILOT_MODE and email.lower() not in settings.PILOT_ALLOWED_EMAILS:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Registrierung ist im Pilotbetrieb nur auf Einladung möglich")
+
+
+def send_verification_mail(user: User) -> None:
+    token = create_email_token(str(user.id), user.email)
+    link = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/auth/verify-email?token={token}"
+    get_mailer().send(Mail(
+        to=user.email, subject="NexusSaaS: E-Mail-Adresse bestätigen",
+        text=(f"Hallo{(' ' + user.name) if user.name else ''},\n\nbitte bestätige deine E-Mail-Adresse über diesen Link "
+              f"(gültig {settings.EMAIL_VERIFY_HOURS} Stunden):\n\n{link}\n\nFalls du dich nicht registriert hast, "
+              "ignoriere diese Nachricht.\n")))
 
 
 def _memberships(db: Session, user_id) -> list[TenantMembership]:
@@ -63,7 +76,49 @@ def register(req: RegisterIn, db: Session = Depends(db_session)):
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "E-Mail ist bereits registriert")
     AUTH_EVENTS.labels("register").inc()
+    try:
+        send_verification_mail(user)
+    except Exception:  # mail problems must not block registration; the user can resend
+        AUTH_EVENTS.labels("verify_mail_failed").inc()
     return _token(user, tenant.id, "owner")
+
+
+class VerifyEmailIn(BaseModel):
+    token: str = Field(min_length=10, max_length=2048)
+
+
+def _verify(token: str, db: Session) -> dict:
+    try:
+        claims = decode_email_token(token)
+    except jwt.PyJWTError:
+        raise HTTPException(400, "Bestätigungslink ungültig oder abgelaufen")
+    user = db.get(User, uuid.UUID(claims["sub"]))
+    if user is None or user.email != claims["email"]:
+        raise HTTPException(400, "Bestätigungslink passt nicht zum Konto")
+    if not user.email_verified:
+        user.email_verified = True
+        db.commit()
+        AUTH_EVENTS.labels("email_verified").inc()
+    return {"status": "verified", "email": user.email}
+
+
+@router.get("/verify-email")
+def verify_email_link(token: str, db: Session = Depends(db_session)):
+    """Target of the link in the mail."""
+    return _verify(token, db)
+
+
+@router.post("/verify-email")
+def verify_email(req: VerifyEmailIn, db: Session = Depends(db_session)):
+    return _verify(req.token, db)
+
+
+@router.post("/resend-verification", status_code=202)
+def resend_verification(p: Principal = Depends(get_principal)):
+    if p.user.email_verified:
+        return {"status": "already_verified"}
+    send_verification_mail(p.user)
+    return {"status": "sent"}
 
 
 @router.post("/login", response_model=TokenOut)

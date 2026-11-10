@@ -63,6 +63,17 @@ class Settings:
             e.strip().lower() for e in os.getenv("PILOT_ALLOWED_EMAILS", "").split(",") if e.strip()
         }
         self.JOB_MAX_ATTEMPTS = int(os.getenv("JOB_MAX_ATTEMPTS", "3"))
+        # Outbound mail (e-mail verification): console | smtp | recording
+        self.MAIL_BACKEND = os.getenv("MAIL_BACKEND", "console")
+        self.MAIL_FROM = os.getenv("MAIL_FROM", "NexusSaaS <no-reply@localhost>")
+        self.SMTP_HOST = os.getenv("SMTP_HOST", "")
+        self.SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+        self.SMTP_USER = os.getenv("SMTP_USER", "")
+        self.SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+        self.SMTP_STARTTLS = _bool("SMTP_STARTTLS", True)
+        self.SMTP_SSL = _bool("SMTP_SSL", False)
+        self.EMAIL_VERIFY_HOURS = int(os.getenv("EMAIL_VERIFY_HOURS", "24"))
+        self.REQUIRE_VERIFIED_EMAIL = _bool("REQUIRE_VERIFIED_EMAIL", False)
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
         if not self.SECRET_KEY:
@@ -71,6 +82,8 @@ class Settings:
             self.SECRET_KEY = "dev-only-insecure-secret-key-change-me-0123456789"
         if self.ENV == "production" and len(self.SECRET_KEY) < 32:
             raise RuntimeError("SECRET_KEY must be at least 32 characters")
+        if self.ENV == "production" and self.MAIL_BACKEND not in ("smtp", "console"):
+            raise RuntimeError("MAIL_BACKEND must be smtp (or console) in production")
 
 
 @lru_cache

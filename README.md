@@ -81,3 +81,9 @@ matrix-app/     Capacitor app (login, KI-Fragebogen, Blueprint, Jobs, Freigaben)
 - Tests share the dev database and Redis: stop the live worker while running `make test`.
 - Generated apps use an `X-Tenant-ID` header placeholder that must be replaced by real auth.
 - Matrix app: in the Android build the ZIP download via blob URL may not work; the web version at `/app` works.
+
+## E-Mail-Verifizierung
+
+Registrierung verschickt einen Bestätigungslink (`/api/v1/auth/verify-email?token=…`, 24 h gültig, signierter Token).
+Backends über `MAIL_BACKEND`: `console` (Dev, Link erscheint im Log), `smtp` (Produktion, `SMTP_*`-Variablen), `recording` (Tests).
+`POST /api/v1/auth/resend-verification` schickt den Link erneut. Erst ein verifiziertes Passwort-Konto darf mit Google verknüpft werden.

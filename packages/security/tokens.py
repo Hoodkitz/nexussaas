@@ -35,3 +35,19 @@ def decode_access_token(token: str) -> dict:
     if claims.get("typ") != "access":
         raise jwt.InvalidTokenError("wrong token type")
     return claims
+
+
+def create_email_token(user_id: str, email: str, hours: Optional[int] = None) -> str:
+    """Short-lived, single-purpose token that proves control of a mailbox."""
+    now = datetime.now(timezone.utc)
+    claims = {"iss": ISSUER, "sub": str(user_id), "email": email.lower(), "typ": "verify", "iat": now,
+              "exp": now + timedelta(hours=hours or settings.EMAIL_VERIFY_HOURS), "jti": uuid.uuid4().hex}
+    return jwt.encode(claims, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_email_token(token: str) -> dict:
+    claims = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM], issuer=ISSUER,
+                        options={"require": ["exp", "sub", "iss", "email"]})
+    if claims.get("typ") != "verify":
+        raise jwt.InvalidTokenError("wrong token type")
+    return claims

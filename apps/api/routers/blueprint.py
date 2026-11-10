@@ -1,147 +1,136 @@
-import os
+"""Guided blueprint creation for the Matrix app: research per answer and a draft blueprint.
+
+All endpoints require login (they call an LLM). LLM output is untrusted: questions
+are length-limited plain text and drafts must pass normalize_blueprint.
+"""
+from __future__ import annotations
+
 import json
-import httpx
-from fastapi import APIRouter, Query
+import re
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from apps.api.deps import Principal, require
+from packages.blueprint.schema import BlueprintError, normalize_blueprint, snake
+from packages.llm import complete_json
 
 router = APIRouter(prefix="/blueprint", tags=["blueprint"])
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-
-QUESTIONS_DB = {
-    "initial": {
-        "id": "app_description",
-        "q": "Was soll deine App machen? Beschreibe in eigenen Worten.",
-        "hint": "z.B. 'Ein Dienstplan für die Bundeswehr' oder 'Ein Tool um Aufgaben im Team zu verwalten'",
-        "type": "text"
-    }
+FIRST_QUESTION = {
+    "id": "app_description",
+    "q": "Was soll deine App machen? Beschreibe in eigenen Worten.",
+    "hint": "z.B. 'Ein Dienstplan für die Bundeswehr' oder 'Ein Tool um Aufgaben im Team zu verwalten'",
+    "type": "text",
+    "options": None,
 }
 
 
-async def call_ollama(prompt: str) -> str:
-    """Call Ollama for real AI research."""
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={
-                    "model": "llama3.2:1b",
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            if resp.status_code == 200:
-                return resp.json().get("response", "")
-    except Exception as e:
-        return f"Error: {str(e)}"
-    return ""
+class ResearchIn(BaseModel):
+    question_id: str = Field(max_length=100)
+    question: str = Field(default="", max_length=500)
+    answer: str = Field(max_length=2000)
+    context: dict[str, str] = Field(default_factory=dict)
 
 
-@router.post("/research")
-async def research_answer(question_id: str = Query(...), answer: str = Query(...)):
-    """AI researches what an answer means and generates follow-up questions."""
-    
-    prompt = f"""Du bist ein Experte für App-Entwicklung. Ein Nutzer hat auf die Frage '{question_id}' geantwortet: '{answer}'.
+class DraftIn(BaseModel):
+    answers: dict[str, str] = Field(default_factory=dict)
 
-Recherchiere:
-1. Was bedeutet diese Antwort für die App-Erstellung?
-2. Welche Daten/Quellen/Vorschriften sind relevant?
-3. Welche 6 spezifischen Folgefragen (mit Fragezeichen) sollten gestellt werden? Generiere 6 echte Fragen die mit ? enden. NICHT allgemeine Fragen.
 
-Antworte im JSON-Format:
-{{
-  "research": "Deine Recherche-Ergebnisse in 2-3 Sätzen",
-  "sources": ["Quelle 1", "Quelle 2"],
-  "follow_up_questions": [
-    {{"id": "unique_id", "q": "Frage text", "hint": "Hinweis", "type": "text oder choice", "options": [["Option 1", "val1", "Beschreibung"], ["Option 2", "val2", "Beschreibung"]]}}
-  ]
-}}
+def _clip(v, n: int) -> str:
+    return re.sub(r"\s+", " ", str(v or "")).strip()[:n]
 
-Nur JSON, keine anderen Texte."""
 
-    response = await call_ollama(prompt)
-    
-    # Try to parse JSON from response - handle nested JSON strings
-    try:
-        # Find the outermost JSON
-        # Strip markdown code blocks
-        response = response.strip()
-        if '```' in response:
-            parts = response.split('```')
-            if len(parts) >= 2:
-                response = parts[1]
-            if response.startswith('json'):
-                response = response[4:]
-        response = response.strip()
-        start = response.find('{')
-        end = response.rfind('}') + 1
-        if start >= 0 and end > start:
-            json_str = response[start:end]
-            data = json.loads(json_str)
-            
-            # The LLM might return research as a JSON string - parse it (one level only)
-            research_raw = data.get("research", "")
-            follow_ups = data.get("follow_up_questions", [])
-            sources = data.get("sources", [])
-            
-            if isinstance(research_raw, str) and research_raw.strip().startswith('{'):
-                try:
-                    inner = json.loads(research_raw)
-                    # Extract research text (don't recurse)
-                    r = inner.get("research", "")
-                    if isinstance(r, str) and not r.strip().startswith('{'):
-                        research = r
-                    else:
-                        research = research_raw
-                    if not sources:
-                        sources = inner.get("sources", [])
-                    if not follow_ups:
-                        follow_ups = inner.get("follow_up_questions", [])
-                except json.JSONDecodeError:
-                    research = research_raw
-            else:
-                research = research_raw
-            
-            if not research:
-                research = "Recherche abgeschlossen"
-            
-            # Clean up follow-up questions - only actual questions
-            clean_followups = []
-            for fq in follow_ups:
-                if isinstance(fq, dict) and fq.get("q"):
-                    q_text = fq.get("q", "").strip()
-                    # Ensure it's a real question (contains ? or starts with question word)
-                    if '?' not in q_text and not any(q_text.lower().startswith(w) for w in ['wie', 'was', 'welche', 'soll', 'braucht', 'gibt', 'moechtest', 'willst']):
-                        q_text = q_text + '?'
-                    fq["q"] = q_text
-                    clean_followups.append({
-                        "id": fq.get("id", "fq_" + str(len(clean_followups))),
-                        "q": fq.get("q", ""),
-                        "hint": fq.get("hint", ""),
-                        "type": fq.get("type", "text"),
-                        "options": fq.get("options", None)
-                    })
-            
-            return {
-                "question_id": question_id,
-                "answer": answer,
-                "research": research if research else "Recherche abgeschlossen",
-                "sources": sources if sources else ["NexusSaaS Blueprint Engine"],
-                "follow_up_questions": clean_followups
-            }
-    except (json.JSONDecodeError, Exception):
-        pass
-    
-    # Fallback: return raw response
-    return {
-        "question_id": question_id,
-        "answer": answer,
-        "research": response[:500] if response else "Recherche abgeschlossen",
-        "sources": ["NexusSaaS Blueprint Engine"],
-        "follow_up_questions": []
-    }
+def _context(answers: dict[str, str]) -> str:
+    items = list(answers.items())[:30]
+    return "\n".join(f"- {_clip(k, 60)}: {_clip(v, 300)}" for k, v in items)
+
+
+def _clean_questions(raw) -> list[dict]:
+    out = []
+    for i, fq in enumerate(raw if isinstance(raw, list) else []):
+        if not isinstance(fq, dict) or not fq.get("q"):
+            continue
+        q = _clip(fq["q"], 200)
+        if not q.endswith("?"):
+            q += "?"
+        opts = None
+        if isinstance(fq.get("options"), list):
+            opts = [[_clip(o[0], 80), _clip(o[1], 40), _clip(o[2] if len(o) > 2 else "", 120)]
+                    for o in fq["options"][:4] if isinstance(o, list) and len(o) >= 2]
+        out.append({"id": snake(_clip(fq.get("id") or f"fq_{i}", 40)) or f"fq_{i}", "q": q,
+                    "hint": _clip(fq.get("hint"), 160), "type": "choice" if opts else "text", "options": opts})
+        if len(out) >= 4:
+            break
+    return out
 
 
 @router.get("/next-question")
-async def get_next_question(context: str = Query("")):
-    """Get the next question based on context."""
-    return QUESTIONS_DB["initial"]
+def next_question(p: Principal = Depends(require("read"))):
+    return FIRST_QUESTION
+
+
+@router.post("/research")
+async def research(req: ResearchIn, p: Principal = Depends(require("read"))):
+    prompt = f"""Du hilfst Laien, eine App zu planen. Bisherige Antworten:
+{_context(req.context)}
+
+Neue Frage: {_clip(req.question or req.question_id, 300)}
+Antwort: {_clip(req.answer, 1000)}
+
+Gib JSON zurück:
+{{"research": "2-3 Sätze: was die Antwort für Daten und Funktionen der App bedeutet",
+ "follow_up_questions": [{{"id": "kurz_snake_case", "q": "konkrete Frage zu Daten oder Abläufen?",
+   "hint": "kurzer Hinweis", "options": [["Option", "wert", "Erklärung"]]}}]}}
+Höchstens 3 Folgefragen, nur wenn wirklich Informationen für das Datenmodell fehlen. Deutsch."""
+    data = await complete_json(prompt)
+    if not data:
+        return {"research": "Antwort gespeichert (KI gerade nicht erreichbar).", "follow_up_questions": [],
+                "ai": False}
+    return {"research": _clip(data.get("research") or "Analyse abgeschlossen.", 600),
+            "follow_up_questions": _clean_questions(data.get("follow_up_questions")), "ai": True}
+
+
+def _fallback(answers: dict[str, str]) -> dict:
+    desc = _clip(answers.get("app_description"), 300) or "Meine App"
+    name = snake(" ".join(desc.split()[:3])) or "meine_app"
+    if not re.match(r"^[a-z]", name):
+        name = "app_" + name
+    return {"name": name[:40], "version": "1.0", "description": desc, "entities": [
+        {"name": "item", "fields": [{"name": "title", "type": "text", "required": True, "max_length": 200},
+                                    {"name": "description", "type": "text"},
+                                    {"name": "status", "type": "text", "max_length": 40},
+                                    {"name": "due_date", "type": "date"}]}]}
+
+
+@router.post("/draft")
+async def draft(req: DraftIn, p: Principal = Depends(require("read"))):
+    """Turn questionnaire answers into a validated blueprint the user can submit as a job."""
+    if not req.answers:
+        raise HTTPException(422, "Keine Antworten")
+    prompt = f"""Erstelle aus diesen Antworten ein Datenmodell für eine Web-API:
+{_context(req.answers)}
+
+Gib NUR JSON in genau diesem Format zurück:
+{{"name": "app_name_snake_case", "version": "1.0", "description": "ein Satz",
+ "entities": [{{"name": "entity_snake_case", "fields": [
+   {{"name": "field_snake_case", "type": "text|integer|float|boolean|timestamp|date|email|json|ref:<entity>",
+     "required": true, "unique": false}}]}}]}}
+Regeln: 2 bis 8 Entitäten, je 2 bis 12 Felder, keine Felder id/tenant_id/created_at/updated_at,
+Beziehungen als Feld "<entity>_id" mit type "ref:<entity>". Englische snake_case-Namen."""
+    data = await complete_json(prompt, timeout=90)
+    source = "ai"
+    bp = None
+    if data:
+        try:
+            normalize_blueprint(data)
+            bp = {k: data[k] for k in ("name", "version", "description", "entities") if k in data}
+        except BlueprintError:
+            bp = None
+    if bp is None:
+        bp, source = _fallback(req.answers), "fallback"
+    normalized = normalize_blueprint(bp)
+    if len(json.dumps(bp)) > 200_000:
+        raise HTTPException(413, "Blueprint zu groß")
+    return {"blueprint": bp, "source": source,
+            "summary": {e["table"]: [f["name"] for f in e["fields"]] for e in normalized["entities"]}}

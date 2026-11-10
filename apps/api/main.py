@@ -1,5 +1,8 @@
 """NexusSaaS API entry point."""
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.middleware import RequestContextMiddleware
@@ -25,6 +28,11 @@ for r in (health, auth, tenants, jobs, billing, privacy):
     app.include_router(r.router)
 app.include_router(blueprint.router, prefix="/api/v1")
 
+
+
+_web = Path(__file__).resolve().parents[2] / "matrix-app" / "www"
+if _web.is_dir():
+    app.mount("/app", StaticFiles(directory=_web, html=True), name="app")
 
 
 @app.get("/")

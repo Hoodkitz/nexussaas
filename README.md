@@ -68,7 +68,7 @@ migrations/     Alembic (baseline creates app role, RLS, checkpointer tables)
 infra/          sandbox image, systemd units
 scripts/        backup.sh, restore.sh
 docs/           ADRs, runbooks
-matrix-app/     Capacitor mobile app (blueprint questionnaire)
+matrix-app/     Capacitor app (login, KI-Fragebogen, Blueprint, Jobs, Freigaben); also served at /app
 ```
 
 ## Known gaps
@@ -79,3 +79,4 @@ matrix-app/     Capacitor mobile app (blueprint questionnaire)
   separate runner host (ADR-04).
 - Stripe and Google need real keys (`STRIPE_*`, `GOOGLE_CLIENT_SECRET`) before they work end to end.
 - Generated apps use an `X-Tenant-ID` header placeholder that must be replaced by real auth.
+- Matrix app: in the Android build the ZIP download via blob URL may not work; the web version at `/app` works.

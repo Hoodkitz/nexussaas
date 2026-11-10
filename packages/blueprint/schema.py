@@ -35,6 +35,16 @@ def snake(name: str) -> str:
     return s
 
 
+def plural(ident: str) -> str:
+    if ident.endswith("s"):
+        return ident
+    if ident.endswith("y") and len(ident) > 1 and ident[-2] not in "aeiou":
+        return ident[:-1] + "ies"
+    if ident.endswith(("x", "ch", "sh", "z")):
+        return ident + "es"
+    return ident + "s"
+
+
 def pascal(ident: str) -> str:
     return "".join(p.capitalize() for p in ident.split("_"))
 
@@ -135,8 +145,7 @@ def normalize_blueprint(bp: Any) -> dict:
                     seen_fields.add(fk)
                     fields.append({"name": fk, "type": "ref", "ref": target, "required": False,
                                    "unique": rel["type"] == "1:1", "max_length": None})
-        entities.append({"name": ename, "class_name": pascal(ename), "table": f"{ename}s"
-                         if not ename.endswith("s") else ename, "fields": fields})
+        entities.append({"name": ename, "class_name": pascal(ename), "table": plural(ename), "fields": fields})
 
     for e in entities:
         for f in e["fields"]:

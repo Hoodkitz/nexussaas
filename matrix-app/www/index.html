@@ -56,46 +56,60 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
 .auth-form input { margin-bottom: 15px; }
 .auth-switch { color: #0a0; font-size: 0.9rem; margin-top: 15px; cursor: pointer; }
 .auth-switch:hover { color: #0f0; }
+.status-badge { display:inline-block; padding:3px 8px; border:1px solid #0f0; border-radius:3px; font-size:0.8rem; margin-bottom:8px; }
+.status-badge.ok { background:#030; } .status-badge.warn { color:#ff0; border-color:#ff0; } .status-badge.err { color:#f44; border-color:#f44; }
+.row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.btn.small { padding:8px 14px; font-size:0.9rem; }
+.btn.danger { background:#300; color:#f44; }
+.small-link { color:#0a0; font-size:0.8rem; cursor:pointer; margin-top:10px; display:block; }
+.entity { text-align:left; border-left:2px solid #0a0; padding-left:10px; margin:8px 0; font-size:0.9rem; }
 .user-info { position: fixed; top: 10px; right: 10px; font-size: 0.8rem; color: #0a0; z-index: 2; }
 </style>
 </head>
 <body>
 <canvas id="matrix-bg"></canvas>
+<div class="user-info" id="user-info"></div>
 <div class="container">
-  <!-- Login Screen -->
   <div id="login-screen" class="screen active">
     <h1>NEXUSSAAS</h1>
-    <p style="margin-bottom:30px; color:#0a0;">KI-gestützter Blueprint Generator</p>
+    <p style="margin-bottom:30px; color:#0a0;">KI-gestützter App-Generator</p>
     <div class="auth-form">
-      <input type="text" class="input-field" id="login-user" placeholder="Benutzername">
-      <input type="password" class="input-field" id="login-pass" placeholder="Passwort">
+      <input type="email" class="input-field" id="login-email" placeholder="E-Mail" autocomplete="username">
+      <input type="password" class="input-field" id="login-pass" placeholder="Passwort" autocomplete="current-password">
       <button class="btn" onclick="doLogin()">LOGIN</button>
-      <div class="auth-switch" onclick="showRegister()">Noch kein Account? Registrieren</div>
+      <div class="auth-switch" onclick="showScreen('register-screen')">Noch kein Account? Registrieren</div>
+      <span class="small-link" onclick="showScreen('server-screen')">Server einstellen</span>
     </div>
   </div>
 
-  <!-- Register Screen -->
   <div id="register-screen" class="screen">
     <h1>NEXUSSAAS</h1>
     <p style="margin-bottom:30px; color:#0a0;">Neuen Account erstellen</p>
     <div class="auth-form">
-      <input type="text" class="input-field" id="reg-user" placeholder="Benutzername">
-      <input type="password" class="input-field" id="reg-pass" placeholder="Passwort">
-      <input type="password" class="input-field" id="reg-pass2" placeholder="Passwort wiederholen">
+      <input type="text" class="input-field" id="reg-name" placeholder="Name">
+      <input type="email" class="input-field" id="reg-email" placeholder="E-Mail" autocomplete="username">
+      <input type="password" class="input-field" id="reg-pass" placeholder="Passwort (10+ Zeichen, Groß/klein, Ziffer)" autocomplete="new-password">
+      <input type="password" class="input-field" id="reg-pass2" placeholder="Passwort wiederholen" autocomplete="new-password">
       <button class="btn" onclick="doRegister()">REGISTRIEREN</button>
-      <div class="auth-switch" onclick="showLogin()">Schon ein Account? Login</div>
+      <div class="auth-switch" onclick="showScreen('login-screen')">Schon ein Account? Login</div>
     </div>
   </div>
 
-  <!-- Dashboard Screen -->
+  <div id="server-screen" class="screen">
+    <h2>SERVER</h2>
+    <p class="hint">Adresse der NexusSaaS-API, z.B. https://nexus.example.com/api/v1</p>
+    <input type="url" class="input-field" id="server-url">
+    <button class="btn" onclick="saveServer()">SPEICHERN</button>
+    <span class="small-link" onclick="showScreen('login-screen')">Zurück</span>
+  </div>
+
   <div id="dashboard-screen" class="screen">
     <h1>PROJEKTE</h1>
     <div id="projects-list"></div>
     <button class="btn" style="margin-top:20px;" onclick="startBlueprint()">NEUES PROJEKT</button>
-    <button class="btn" style="margin-top:10px; background:#300; color:#f00;" onclick="doLogout()">LOGOUT</button>
+    <button class="btn danger" style="margin-top:10px;" onclick="doLogout()">LOGOUT</button>
   </div>
 
-  <!-- Question Screen -->
   <div id="question-screen" class="screen">
     <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
     <div class="question" id="question-text"></div>
@@ -106,27 +120,26 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
       <h4>🤖 KI-ANALYSE</h4>
       <div id="research-content"></div>
     </div>
-    <button class="btn" id="next-btn" onclick="submitAnswer()" disabled>WEITER</button>
+    <button class="btn" id="next-btn" disabled>WEITER</button>
+    <span class="small-link" id="finish-early" onclick="finishBlueprint()">Genug Fragen, Blueprint erstellen</span>
+  </div>
+
+  <div id="review-screen" class="screen">
+    <h2>BLUEPRINT</h2>
+    <div class="project-card">
+      <h3 id="review-name"></h3>
+      <p id="review-desc"></p>
+      <div id="review-entities"></div>
+      <p id="review-source" style="font-size:0.8rem;"></p>
+    </div>
+    <button class="btn" onclick="submitJob()">APP ERSTELLEN</button>
+    <span class="small-link" onclick="showDashboard()">Verwerfen</span>
   </div>
 
   <div id="loading-screen" class="screen">
-    <h2>ERSTELLE APP...</h2>
-    <div class="progress-bar"><div class="progress-fill" id="loading-progress"></div></div>
-    <div class="loading-text" id="loading-text">Initialisiere...</div>
-  </div>
-</div>
-
-<div class="chat-overlay" id="chat-overlay">
-  <div class="chat-window">
-    <div class="chat-header">
-      <span>AI Chat — <span id="chat-project-name"></span></span>
-      <button class="btn" style="padding:5px 15px; font-size:0.9rem;" onclick="closeChat()">X</button>
-    </div>
-    <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-input-area">
-      <input type="text" class="input-field" id="chat-input" placeholder="Änderung beschreiben..." style="margin-bottom:0;">
-      <button class="btn" style="padding:10px 20px;" onclick="sendChat()">SENDEN</button>
-    </div>
+    <h2 id="loading-title">BITTE WARTEN...</h2>
+    <div class="progress-bar"><div class="progress-fill" id="loading-progress" style="width:50%"></div></div>
+    <div class="loading-text" id="loading-text"></div>
   </div>
 </div>
 
@@ -137,310 +150,287 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
 const fontSize = 14;
-const columns = canvas.width / fontSize;
-const drops = Array(Math.floor(columns)).fill(1);
+const drops = Array(Math.floor(canvas.width / fontSize)).fill(1);
 function drawMatrix() {
   ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#0f0';
   ctx.font = fontSize + 'px monospace';
   for (let i = 0; i < drops.length; i++) {
-    const text = chars[Math.floor(Math.random() * chars.length)];
-    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+    ctx.fillText(chars[Math.floor(Math.random() * chars.length)], i * fontSize, drops[i] * fontSize);
     if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
     drops[i]++;
   }
 }
 setInterval(drawMatrix, 33);
 
-const API_URL = 'https://flyer-increasing-rca-scene.trycloudflare.com/api/v1';
-let currentQuestion = null;
-window.pendingQuestions = [];
-let answers = {};
-let questionCount = 0;
-const MAX_QUESTIONS = 20;
-let currentUser = null;
+// ---------- config & API ----------
+const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+function apiBase() {
+  const saved = localStorage.getItem('nexus_api_url');
+  if (saved) return saved.replace(/\/+$/, '');
+  if (!IS_NATIVE && location.protocol.startsWith('http')) return location.origin + '/api/v1';
+  return '';
+}
+function token() { return localStorage.getItem('nexus_token'); }
 
+async function api(path, opts = {}) {
+  const base = apiBase();
+  if (!base) { showScreen('server-screen'); throw new Error('Bitte zuerst die Server-Adresse eintragen'); }
+  const headers = Object.assign({}, opts.headers || {});
+  if (token()) headers['Authorization'] = 'Bearer ' + token();
+  if (opts.json !== undefined) { headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.json); }
+  const resp = await fetch(base + path, { method: opts.method || 'GET', headers, body: opts.body });
+  if (resp.status === 401 && token()) { doLogout(); throw new Error('Sitzung abgelaufen, bitte neu anmelden'); }
+  if (opts.raw) { if (!resp.ok) throw new Error('Fehler ' + resp.status); return resp; }
+  let data = null;
+  try { data = await resp.json(); } catch (e) { data = null; }
+  if (!resp.ok) throw new Error(errorText(data, resp.status));
+  return data;
+}
+function errorText(data, status) {
+  const d = data && data.detail;
+  if (!d) return 'Fehler ' + status;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map(x => typeof x === 'string' ? x : (x.msg || JSON.stringify(x))).join('\n');
+  if (d.blueprint_errors) return 'Blueprint: ' + d.blueprint_errors.join(', ');
+  return JSON.stringify(d);
+}
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v);
+  }
+  for (const c of children) if (c !== null && c !== undefined) e.append(c instanceof Node ? c : String(c));
+  return e;
+}
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  if (id !== 'dashboard-screen') stopPolling();
+}
+function loading(title, text) {
+  document.getElementById('loading-title').textContent = title;
+  document.getElementById('loading-text').textContent = text || '';
+  showScreen('loading-screen');
 }
 
-function doLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  if (!user || !pass) { alert('Bitte Benutzername und Passwort eingeben'); return; }
-  const users = JSON.parse(localStorage.getItem('nexus_users') || '{}');
-  if (users[user] && users[user] === pass) {
-    currentUser = user;
-    localStorage.setItem('nexus_current_user', user);
-    showDashboard();
-  } else {
-    alert('Falsche Anmeldedaten');
-  }
+// ---------- auth ----------
+let me = null;
+function storeSession(t) {
+  localStorage.setItem('nexus_token', t.access_token);
 }
-
-function doRegister() {
-  const user = document.getElementById('reg-user').value.trim();
-  const pass = document.getElementById('reg-pass').value;
-  const pass2 = document.getElementById('reg-pass2').value;
-  if (!user || !pass) { alert('Bitte alle Felder ausfüllen'); return; }
-  if (pass !== pass2) { alert('Passwörter stimmen nicht überein'); return; }
-  const users = JSON.parse(localStorage.getItem('nexus_users') || '{}');
-  if (users[user]) { alert('Benutzername existiert bereits'); return; }
-  users[user] = pass;
-  localStorage.setItem('nexus_users', JSON.stringify(users));
-  currentUser = user;
-  localStorage.setItem('nexus_current_user', user);
-  showDashboard();
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!email || !password) { alert('Bitte E-Mail und Passwort eingeben'); return; }
+  try {
+    storeSession(await api('/auth/login', { method: 'POST', json: { email, password } }));
+    await showDashboard();
+  } catch (e) { alert(e.message); }
 }
-
+async function doRegister() {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-pass').value;
+  if (!email || !password) { alert('Bitte alle Felder ausfüllen'); return; }
+  if (password !== document.getElementById('reg-pass2').value) { alert('Passwörter stimmen nicht überein'); return; }
+  try {
+    storeSession(await api('/auth/register', { method: 'POST', json: { email, password, name: name || null } }));
+    await showDashboard();
+  } catch (e) { alert(e.message); }
+}
 function doLogout() {
-  currentUser = null;
-  localStorage.removeItem('nexus_current_user');
+  localStorage.removeItem('nexus_token');
+  me = null;
+  document.getElementById('user-info').textContent = '';
+  showScreen('login-screen');
+}
+function saveServer() {
+  const v = document.getElementById('server-url').value.trim();
+  if (v && !/^https?:\/\//.test(v)) { alert('Adresse muss mit http:// oder https:// beginnen'); return; }
+  if (v) localStorage.setItem('nexus_api_url', v); else localStorage.removeItem('nexus_api_url');
   showScreen('login-screen');
 }
 
-function showRegister() { showScreen('register-screen'); }
-function showLogin() { showScreen('login-screen'); }
+// ---------- dashboard ----------
+const STATUS_TEXT = {
+  RECEIVED: 'Eingegangen', SPEC_VALIDATION: 'Blueprint wird geprüft', BLUEPRINT_APPROVAL: 'Wartet auf deine Freigabe',
+  DDL_GENERATION: 'Datenbank wird erzeugt', BACKEND_GENERATION: 'API wird erzeugt', STATIC_CHECKS: 'Code wird geprüft',
+  SANDBOX_TEST: 'Tests laufen in der Sandbox', SECURITY_REVIEW: 'Sicherheits-Scan', HUMAN_RELEASE_APPROVAL: 'Wartet auf Release-Freigabe',
+  PACKAGED: 'Wird verpackt', COMPLETED: 'Fertig', FAILED: 'Fehlgeschlagen', CANCELLED: 'Abgebrochen', REJECTED: 'Abgelehnt'
+};
+const WAITING = ['BLUEPRINT_APPROVAL', 'HUMAN_RELEASE_APPROVAL'];
+const DONE = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'];
+let pollTimer = null;
+function stopPolling() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
 
-function getProjects() {
-  if (!currentUser) return [];
-  const all = JSON.parse(localStorage.getItem('nexus_projects') || '{}');
-  return all[currentUser] || [];
-}
-
-function saveProject(project) {
-  if (!currentUser) return;
-  const all = JSON.parse(localStorage.getItem('nexus_projects') || '{}');
-  if (!all[currentUser]) all[currentUser] = [];
-  all[currentUser].push(project);
-  localStorage.setItem('nexus_projects', JSON.stringify(all));
-}
-
-function showDashboard() {
-  const projects = getProjects();
-  const list = document.getElementById('projects-list');
-  list.innerHTML = '';
-  if (projects.length === 0) {
-    list.innerHTML = '<p style="color:#0a0;">Noch keine Projekte. Erstelle dein erstes!</p>';
-  }
-  projects.forEach(p => {
-    const card = document.createElement('div');
-    card.className = 'project-card';
-    card.innerHTML = `
-      <h3>${p.name}</h3>
-      <p>${p.desc}</p>
-      <p style="color:#0f0;">Status: ${p.status}</p>
-      <p style="color:#0a0; font-size:0.8rem;">${p.answers} Antworten</p>
-      <a href="#" class="download-btn" download>APK HERUNTERLADEN</a>
-      <button class="chat-btn" onclick="openChat('${p.name}')">AI CHAT</button>
-    `;
-    list.appendChild(card);
-  });
+async function showDashboard() {
   showScreen('dashboard-screen');
+  try {
+    me = await api('/auth/me');
+    document.getElementById('user-info').textContent = me.user.email + ' · ' + (me.role || '');
+    await renderJobs();
+  } catch (e) {
+    document.getElementById('projects-list').replaceChildren(el('p', { style: 'color:#f44' }, e.message));
+  }
 }
+function canApprove() { return me && (me.role === 'owner' || me.role === 'admin'); }
 
-async function startBlueprint() {
-  answers = {};
-  questionCount = 0;
-  window.pendingQuestions = [];
-  await fetchNextQuestion();
-  showScreen('question-screen');
-}
-
-async function fetchNextQuestion() {
-  if (window.pendingQuestions && window.pendingQuestions.length > 0) {
-    const nextQ = window.pendingQuestions.shift();
-    currentQuestion = {
-      id: nextQ.id || ('q_' + questionCount),
-      q: nextQ.q,
-      hint: nextQ.hint || '',
-      type: nextQ.type || 'text',
-      options: nextQ.options || null
-    };
-    showQuestion();
+async function renderJobs() {
+  stopPolling();
+  const jobs = await api('/jobs?limit=30');
+  const list = document.getElementById('projects-list');
+  if (!jobs.length) {
+    list.replaceChildren(el('p', { style: 'color:#0a0' }, 'Noch keine Projekte. Erstelle dein erstes!'));
     return;
   }
-  if (questionCount === 0) {
-    currentQuestion = {
-      id: 'app_description',
-      q: 'Was soll deine App machen? Beschreibe in eigenen Worten.',
-      hint: "z.B. 'Ein Dienstplan für die Bundeswehr' oder 'Ein Tool um Aufgaben im Team zu verwalten'",
-      type: 'text'
-    };
+  list.replaceChildren(...jobs.map(jobCard));
+  const running = jobs.some(j => !DONE.includes(j.status) && !WAITING.includes(j.status));
+  const waiting = jobs.some(j => WAITING.includes(j.status));
+  if (running || waiting) {
+    // fast while the worker is busy, slow while a job waits for a decision (it may come from elsewhere)
+    pollTimer = setTimeout(() => renderJobs().catch(() => {}), running ? 3000 : 10000);
   }
-  showQuestion();
+}
+function jobCard(j) {
+  const summary = (j.result && j.result.summary) || {};
+  const name = summary.app || ('Job ' + j.id.slice(0, 8));
+  const cls = j.status === 'COMPLETED' ? 'ok' : (WAITING.includes(j.status) ? 'warn' : (['FAILED', 'REJECTED', 'CANCELLED'].includes(j.status) ? 'err' : ''));
+  const row = el('div', { class: 'row' });
+  if (WAITING.includes(j.status) && canApprove()) {
+    row.append(el('button', { class: 'btn small', onclick: () => decide(j.id, true) }, 'FREIGEBEN'),
+               el('button', { class: 'btn small danger', onclick: () => decide(j.id, false) }, 'ABLEHNEN'));
+  }
+  if (j.status === 'COMPLETED') row.append(el('button', { class: 'btn small', onclick: () => download(j) }, 'ZIP LADEN'));
+  if (j.status === 'FAILED') row.append(el('button', { class: 'btn small', onclick: () => jobAction(j.id, 'retry') }, 'NEU STARTEN'));
+  if (!DONE.includes(j.status)) row.append(el('button', { class: 'btn small danger', onclick: () => jobAction(j.id, 'cancel') }, 'ABBRECHEN'));
+  return el('div', { class: 'project-card' },
+    el('h3', {}, name),
+    el('span', { class: 'status-badge ' + cls }, STATUS_TEXT[j.status] || j.status),
+    j.error ? el('p', { style: 'color:#f44' }, j.error) : null,
+    el('p', { style: 'font-size:0.8rem' }, new Date(j.created_at).toLocaleString('de-DE')),
+    j.artifact_sha256 ? el('p', { style: 'font-size:0.7rem; word-break:break-all' }, 'SHA256 ' + j.artifact_sha256) : null,
+    row);
+}
+async function decide(id, approve) {
+  if (!approve && !confirm('Wirklich ablehnen? Der Job wird beendet.')) return;
+  try { await api('/jobs/' + id + '/decision', { method: 'POST', json: { approve } }); } catch (e) { alert(e.message); }
+  stopPolling();
+  pollTimer = setTimeout(() => renderJobs().catch(() => {}), 2500);
+}
+async function jobAction(id, action) {
+  if (action === 'cancel' && !confirm('Job abbrechen?')) return;
+  try { await api('/jobs/' + id + '/' + action, { method: 'POST' }); } catch (e) { alert(e.message); }
+  renderJobs().catch(() => {});
+}
+async function download(j) {
+  try {
+    const resp = await api('/jobs/' + j.id + '/artifact', { raw: true });
+    const blob = await resp.blob();
+    const name = ((resp.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || 'app.zip';
+    const url = URL.createObjectURL(blob);
+    const a = el('a', { href: url, download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) { alert(e.message); }
 }
 
+// ---------- questionnaire ----------
+const MAX_QUESTIONS = 12;
+let currentQuestion = null, pending = [], answers = {}, questionCount = 0, draftBlueprint = null;
+
+async function startBlueprint() {
+  answers = {}; questionCount = 0; pending = [];
+  try { currentQuestion = await api('/blueprint/next-question'); } catch (e) { alert(e.message); return; }
+  showQuestion();
+  showScreen('question-screen');
+}
 function showQuestion() {
   document.getElementById('question-text').textContent = currentQuestion.q;
-  document.getElementById('question-hint').textContent = currentQuestion.hint;
-  document.getElementById('progress').style.width = (questionCount / MAX_QUESTIONS * 100) + '%';
-  document.getElementById('answer-input').value = '';
+  document.getElementById('question-hint').textContent = currentQuestion.hint || '';
+  document.getElementById('progress').style.width = Math.min(100, questionCount / MAX_QUESTIONS * 100) + '%';
+  const input = document.getElementById('answer-input');
+  input.value = '';
   document.getElementById('ai-research').classList.remove('active');
-  document.getElementById('next-btn').disabled = true;
-  document.getElementById('next-btn').onclick = submitAnswer;
-  document.getElementById('next-btn').textContent = 'WEITER';
-
+  const next = document.getElementById('next-btn');
+  next.disabled = true; next.textContent = 'WEITER'; next.onclick = submitAnswer;
+  document.getElementById('finish-early').style.display = questionCount > 0 ? 'block' : 'none';
   const container = document.getElementById('options-container');
-  container.innerHTML = '';
-  if (currentQuestion.options) {
-    currentQuestion.options.forEach(opt => {
-      const div = document.createElement('div');
-      div.className = 'option';
-      div.innerHTML = '<div class="label">' + opt[0] + '</div><div class="desc">' + opt[2] + '</div>';
-      div.onclick = () => selectOption(opt[1], div);
-      container.appendChild(div);
-    });
-  }
+  container.replaceChildren(...(currentQuestion.options || []).map(opt => {
+    const div = el('div', { class: 'option' }, el('div', { class: 'label' }, opt[0]), el('div', { class: 'desc' }, opt[2] || ''));
+    div.onclick = () => {
+      document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+      div.classList.add('selected');
+      input.value = opt[0];
+      next.disabled = false;
+    };
+    return div;
+  }));
 }
-
-function selectOption(value, el) {
-  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
-  el.classList.add('selected');
-  document.getElementById('answer-input').value = value;
-  document.getElementById('next-btn').disabled = false;
-}
-
-document.getElementById('answer-input').addEventListener('input', function() {
-  if (this.value.trim()) {
-    document.getElementById('next-btn').disabled = false;
-  }
+document.getElementById('answer-input').addEventListener('input', function () {
+  document.getElementById('next-btn').disabled = !this.value.trim();
 });
 
 async function submitAnswer() {
   const answer = document.getElementById('answer-input').value.trim();
   if (!answer) return;
-  
-  answers[currentQuestion.id] = answer;
+  answers[currentQuestion.id] = currentQuestion.q + ' → ' + answer;
   questionCount++;
-  
-  const researchDiv = document.getElementById('ai-research');
-  const researchContent = document.getElementById('research-content');
-  researchDiv.classList.add('active');
-  researchContent.innerHTML = '<span class="ai-analyzing">🔍 KI recherchiert: ' + answer + '...</span>';
-  document.getElementById('next-btn').disabled = true;
-  
+  document.getElementById('finish-early').style.display = 'block';
+  const box = document.getElementById('ai-research');
+  const content = document.getElementById('research-content');
+  box.classList.add('active');
+  content.replaceChildren(el('span', { class: 'ai-analyzing' }, '🔍 KI analysiert...'));
+  const next = document.getElementById('next-btn');
+  next.disabled = true;
   try {
-    const resp = await fetch(API_URL + '/blueprint/research?question_id=' + encodeURIComponent(currentQuestion.id) + '&answer=' + encodeURIComponent(answer), {method: 'POST'});
-    const data = await resp.json();
-    
-    let html = '<div class="research-item">📊 ' + data.research + '</div>';
-    if (data.sources && data.sources.length > 0) {
-      html += '<div class="research-item">🔗 Quellen: ' + data.sources.join(', ') + '</div>';
-    }
-    if (data.follow_up_questions && data.follow_up_questions.length > 0) {
-      html += '<div class="research-item" style="margin-top:10px; color:#0f0;">❓ ' + data.follow_up_questions.length + ' Folgefragen generiert</div>';
-    }
-    html += '<div class="research-item" style="margin-top:10px;">✅ Wird in Blueprint und App-Erstellung einfließen.</div>';
-    researchContent.innerHTML = html;
-    
-    if (data.follow_up_questions && data.follow_up_questions.length > 0 && questionCount < MAX_QUESTIONS) {
-      if (!window.pendingQuestions) window.pendingQuestions = [];
-      window.pendingQuestions = window.pendingQuestions.concat(data.follow_up_questions);
-      document.getElementById('next-btn').disabled = false;
-      document.getElementById('next-btn').onclick = function() {
-        researchDiv.classList.remove('active');
-        showQuestion();
-      };
-    } else {
-      document.getElementById('next-btn').disabled = false;
-      document.getElementById('next-btn').onclick = function() {
-        researchDiv.classList.remove('active');
-        finishBlueprint();
-      };
-      document.getElementById('next-btn').textContent = 'FERTIG';
-    }
-  } catch (err) {
-    researchContent.innerHTML = '<div class="research-item">📊 Antwort gespeichert: ' + answer + '</div>' +
-      '<div class="research-item">⚠️ Backend nicht erreichbar, verwende lokale Analyse.</div>' +
-      '<div class="research-item">✅ Wird in Blueprint und App-Erstellung einfließen.</div>';
-    document.getElementById('next-btn').disabled = false;
-    document.getElementById('next-btn').onclick = function() {
-      researchDiv.classList.remove('active');
-      if (questionCount < MAX_QUESTIONS) {
-        fetchNextQuestion();
-      } else {
-        finishBlueprint();
-      }
-    };
+    const data = await api('/blueprint/research', { method: 'POST', json: {
+      question_id: currentQuestion.id, question: currentQuestion.q, answer, context: answers } });
+    content.replaceChildren(el('div', { class: 'research-item' }, '📊 ' + data.research));
+    const known = new Set(Object.keys(answers).concat(pending.map(q => q.id)));
+    pending = pending.concat((data.follow_up_questions || []).filter(q => !known.has(q.id)));
+    if (pending.length) content.append(el('div', { class: 'research-item' }, '❓ ' + pending.length + ' offene Fragen'));
+  } catch (e) {
+    content.replaceChildren(el('div', { class: 'research-item' }, '⚠️ ' + e.message));
+  }
+  next.disabled = false;
+  if (pending.length && questionCount < MAX_QUESTIONS) {
+    next.onclick = () => { currentQuestion = pending.shift(); showQuestion(); };
+  } else {
+    next.textContent = 'BLUEPRINT ERSTELLEN';
+    next.onclick = finishBlueprint;
   }
 }
 
-function finishBlueprint() {
-  const projectName = answers.app_description || 'Meine App';
-  saveProject({
-    name: projectName,
-    desc: answers.app_description || '',
-    status: 'Fertig',
-    answers: Object.keys(answers).length
-  });
-  showDashboard();
+async function finishBlueprint() {
+  loading('BLUEPRINT', 'KI entwirft das Datenmodell...');
+  try {
+    const data = await api('/blueprint/draft', { method: 'POST', json: { answers } });
+    draftBlueprint = data.blueprint;
+    document.getElementById('review-name').textContent = data.blueprint.name;
+    document.getElementById('review-desc').textContent = data.blueprint.description || '';
+    document.getElementById('review-entities').replaceChildren(...Object.entries(data.summary).map(([t, fields]) =>
+      el('div', { class: 'entity' }, el('b', {}, t), ': ' + (fields.join(', ') || '-'))));
+    document.getElementById('review-source').textContent =
+      data.source === 'ai' ? 'Von der KI entworfen' : 'Standard-Vorlage (KI nicht erreichbar)';
+    showScreen('review-screen');
+  } catch (e) { alert(e.message); showScreen('question-screen'); }
 }
 
-function startLoading() {
-  showScreen('loading-screen');
-  const steps = [
-    "Blueprint wird erstellt...",
-    "KI analysiert alle Antworten...",
-    "Datenmodell wird generiert...",
-    "API-Endpunkte werden definiert...",
-    "Authentifizierung wird konfiguriert...",
-    "Frontend wird vorbereitet...",
-    "Integrationen werden eingerichtet...",
-    "Nicht-funktionale Anforderungen werden gesetzt...",
-    "Blueprint wird validiert...",
-    "App wird kompiliert...",
-    "APK wird generiert..."
-  ];
-  let i = 0;
-  const interval = setInterval(() => {
-    if (i < steps.length) {
-      document.getElementById('loading-text').textContent = steps[i];
-      document.getElementById('loading-progress').style.width = ((i+1)/steps.length*100) + '%';
-      i++;
-    } else {
-      clearInterval(interval);
-      finishBlueprint();
-    }
-  }, 800);
+async function submitJob() {
+  loading('APP WIRD ERSTELLT', 'Job wird angelegt...');
+  try {
+    await api('/jobs', { method: 'POST', json: { blueprint: draftBlueprint },
+                         headers: { 'Idempotency-Key': 'mx-' + Date.now() + '-' + Math.random().toString(36).slice(2) } });
+    await showDashboard();
+  } catch (e) { alert(e.message); showScreen('review-screen'); }
 }
 
-let currentChatProject = '';
-function openChat(projectName) {
-  currentChatProject = projectName;
-  document.getElementById('chat-project-name').textContent = projectName;
-  document.getElementById('chat-overlay').classList.add('active');
-  document.getElementById('chat-messages').innerHTML = '<div class="chat-msg ai">Hallo! Ich bin dein AI-Assistent. Sag mir was du an "' + projectName + '" ändern möchtest.</div>';
-}
-function closeChat() {
-  document.getElementById('chat-overlay').classList.remove('active');
-}
-function sendChat() {
-  const input = document.getElementById('chat-input');
-  const msg = input.value.trim();
-  if (!msg) return;
-  const msgs = document.getElementById('chat-messages');
-  msgs.innerHTML += '<div class="chat-msg user">' + msg + '</div>';
-  input.value = '';
-  setTimeout(() => {
-    msgs.innerHTML += '<div class="chat-msg ai">Verstanden! Ich werde "' + msg + '" umsetzen. Die App wird neu generiert.</div>';
-    msgs.scrollTop = msgs.scrollHeight;
-  }, 1000);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-document.getElementById('chat-input').addEventListener('keypress', function(e) {
-  if (e.key === 'Enter') sendChat();
-});
-
-// Auto-login if session exists
-window.addEventListener('load', function() {
-  const savedUser = localStorage.getItem('nexus_current_user');
-  if (savedUser) {
-    currentUser = savedUser;
-    showDashboard();
-  }
+window.addEventListener('load', function () {
+  document.getElementById('server-url').value = localStorage.getItem('nexus_api_url') || '';
+  ['nexus_users', 'nexus_projects', 'nexus_current_user'].forEach(k => localStorage.removeItem(k)); // old local-only data
+  if (token()) showDashboard(); else if (!apiBase()) showScreen('server-screen');
 });
 </script>
 </body>

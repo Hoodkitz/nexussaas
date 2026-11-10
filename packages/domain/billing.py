@@ -124,3 +124,25 @@ def _apply(db, event: dict) -> str:
     tenant.monthly_job_quota = PLAN_QUOTAS[plan]
     audit(db, tenant.id, None, "billing.subscription_changed", event["id"], {"status": status, "plan": plan})
     return "processed"
+
+
+def poll_stripe_events(redis_client, api_key: str, overlap_seconds: int = 900) -> dict:
+    """Pull events from the Stripe Events API instead of receiving webhooks.
+
+    Works without a public URL; authenticity comes from fetching with our secret key.
+    Each poll re-reads an overlapping time window (events can become visible late);
+    the idempotent inbox in process_event drops everything already applied.
+    """
+    import stripe
+
+    cursor_key = "nexus:stripe:poll_since"
+    now = int(datetime.now(timezone.utc).timestamp())
+    since = int(redis_client.get(cursor_key) or now - 7 * 86400)
+    params = {"limit": 100, "types": sorted(HANDLED), "created": {"gte": since - overlap_seconds}}
+    events = list(stripe.Event.list(api_key=api_key, **params).auto_paging_iter())
+    counts: dict[str, int] = {}
+    for ev in sorted(events, key=lambda e: (e.created, e.id)):  # oldest first
+        outcome = process_event(ev.to_dict())
+        counts[outcome] = counts.get(outcome, 0) + 1
+    redis_client.set(cursor_key, now)
+    return {k: v for k, v in counts.items() if k != "duplicate"}

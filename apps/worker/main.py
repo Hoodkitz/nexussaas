@@ -17,6 +17,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from sqlalchemy import text
 
 from apps.worker.runner import Runner, checkpointer_url
+from packages.domain.billing import poll_stripe_events
 from packages.observability.logging import setup_logging
 from packages.settings import settings
 from packages.storage import queue
@@ -63,6 +64,17 @@ def reap_stale(r, older_than: str = "15 minutes") -> int:
     return len(rows)
 
 
+def poll_billing(r) -> None:
+    if not settings.STRIPE_SECRET_KEY or settings.STRIPE_WEBHOOK_SECRET:
+        return  # webhooks configured (or no Stripe): nothing to poll
+    try:
+        counts = poll_stripe_events(r, settings.STRIPE_SECRET_KEY)
+        if counts:
+            log.info("stripe events polled", extra={"fields": counts})
+    except Exception:
+        log.exception("stripe polling failed")
+
+
 def process_one(runner: Runner, r, worker_id: str, timeout: float = 2.0) -> dict | None:
     raw = queue.take(r, worker_id, timeout)
     if raw is None:
@@ -102,6 +114,7 @@ def main() -> None:  # pragma: no cover - process loop
     queue.heartbeat(r, worker_id)
     log.info("worker started", extra={"fields": {"worker_id": worker_id, "recovered": queue.recover_orphans(r)}})
     last_maint = 0.0
+    last_slow = 0.0
     with PostgresSaver.from_conn_string(checkpointer_url()) as saver:
         runner = Runner(saver)
         while not _stop:
@@ -111,8 +124,10 @@ def main() -> None:  # pragma: no cover - process loop
                 dispatch_outbox(r)
                 queue.promote_delayed(r)
                 queue.recover_orphans(r)
-                if int(now) % 60 < 5:
+                if now - last_slow > 60:
                     reap_stale(r)
+                    poll_billing(r)
+                    last_slow = now
                 last_maint = now
             try:
                 if process_one(runner, r, worker_id) is None:

@@ -77,6 +77,7 @@ matrix-app/     Capacitor app (login, KI-Fragebogen, Blueprint, Jobs, Freigaben)
   existing unverified password account (fail closed). Needs an email provider for verification and reset.
 - Sandbox runs on the same host with runc; production needs gVisor (`SANDBOX_RUNTIME=runsc`) or a
   separate runner host (ADR-04).
-- Stripe and Google need real keys (`STRIPE_*`, `GOOGLE_CLIENT_SECRET`) before they work end to end.
+- Stripe runs in test mode. Without a public URL the worker polls the Stripe Events API every minute (same idempotent processing); set `STRIPE_WEBHOOK_SECRET` to switch to webhooks. Google login still needs `GOOGLE_CLIENT_SECRET`.
+- Tests share the dev database and Redis: stop the live worker while running `make test`.
 - Generated apps use an `X-Tenant-ID` header placeholder that must be replaced by real auth.
 - Matrix app: in the Android build the ZIP download via blob URL may not work; the web version at `/app` works.

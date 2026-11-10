@@ -98,9 +98,12 @@ def test_unknown_tenant_and_type_ignored(client):
     assert post(client, ev).json()["status"] == "ignored"
 
 
-def test_checkout_requires_owner_and_config(make_account, client):
+def test_checkout_requires_owner_and_config(make_account, client, monkeypatch):
+    from packages.settings import settings
+
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "")
     a = make_account()
-    assert a.post("/api/v1/billing/checkout").status_code == 503  # not configured in tests
+    assert a.post("/api/v1/billing/checkout").status_code == 503
 
 
 def test_same_second_event_cannot_revive_canceled(client, make_account):
@@ -109,3 +112,32 @@ def test_same_second_event_cannot_revive_canceled(client, make_account):
     post(client, sub_event(a.tenant_id, "canceled", now, etype="customer.subscription.deleted"))
     assert post(client, sub_event(a.tenant_id, "active", now)).json()["status"] == "stale"
     assert a.get("/api/v1/billing/subscription").json()["status"] == "canceled"
+
+
+def test_polling_uses_idempotent_processing(make_account, monkeypatch):
+    """Polling re-reads overlapping windows; already applied events are dropped."""
+    import stripe
+
+    from packages.domain.billing import poll_stripe_events
+    from packages.storage import queue
+
+    a = make_account()
+    ev = sub_event(a.tenant_id)
+
+    class E(dict):
+        created = ev["created"]
+        id = ev["id"]
+
+        def to_dict(self):
+            return dict(self)
+
+    class Page:
+        def auto_paging_iter(self):
+            return iter([E(ev)])
+
+    monkeypatch.setattr(stripe.Event, "list", lambda **kw: Page())
+    r = queue.client()
+    r.delete("nexus:stripe:poll_since")
+    assert poll_stripe_events(r, "sk_test_x") == {"processed": 1}
+    assert poll_stripe_events(r, "sk_test_x") == {}
+    r.delete("nexus:stripe:poll_since")

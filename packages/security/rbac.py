@@ -1,12 +1,14 @@
 """Role-based access control."""
-from packages.domain.user import UserRole
+from packages.domain.models import UserRole
 
-PERMISSIONS = {
-    UserRole.OWNER: {"read", "write", "delete", "admin", "billing"},
-    UserRole.ADMIN: {"read", "write", "delete", "admin"},
-    UserRole.MEMBER: {"read", "write"},
-    UserRole.VIEWER: {"read"},
+PERMISSIONS: dict[str, set[str]] = {
+    UserRole.OWNER.value: {"read", "write", "approve", "admin", "billing", "delete_tenant"},
+    UserRole.ADMIN.value: {"read", "write", "approve", "admin"},
+    UserRole.MEMBER.value: {"read", "write"},
+    UserRole.VIEWER.value: {"read"},
 }
+ROLE_RANK = {"viewer": 0, "member": 1, "admin": 2, "owner": 3}
 
-def has_permission(role: UserRole, permission: str) -> bool:
-    return permission in PERMISSIONS.get(role, set())
+
+def has_permission(role: str, permission: str) -> bool:
+    return permission in PERMISSIONS.get(str(getattr(role, "value", role)), set())

@@ -7,3 +7,5 @@ venv/
 *.egg-info/
 .pytest_cache/
 .env
+var/
+.ruff_cache/

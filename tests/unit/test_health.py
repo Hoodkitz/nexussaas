@@ -1,15 +1,22 @@
-"""Basic health endpoint tests."""
-from fastapi.testclient import TestClient
-from apps.api.main import app
+from tests.conftest import needs_services
 
-client = TestClient(app)
 
-def test_root():
+def test_root(client):
     r = client.get("/")
-    assert r.status_code == 200
-    assert r.json()["service"] == "NexusSaaS"
+    assert r.status_code == 200 and r.json()["service"] == "NexusSaaS"
 
-def test_healthz():
-    r = client.get("/healthz")
-    assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+
+def test_healthz_and_request_id(client):
+    r = client.get("/healthz", headers={"X-Request-ID": "abc123"})
+    assert r.json() == {"status": "ok"} and r.headers["X-Request-ID"] == "abc123"
+
+
+def test_metrics(client):
+    client.get("/healthz")
+    r = client.get("/metrics")
+    assert r.status_code == 200 and b"nexus_http_requests_total" in r.content
+
+
+@needs_services
+def test_readyz(client):
+    assert client.get("/readyz").json()["status"] == "ready"

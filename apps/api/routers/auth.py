@@ -16,6 +16,7 @@ from packages.domain.models import Tenant, TenantMembership, User
 from packages.domain.tenancy import create_tenant
 from packages.observability.metrics import AUTH_EVENTS
 from packages.security import oidc
+from packages.security.audit import audit
 from packages.security.password import hash_password, validate_password_strength, verify_password
 from packages.security.tokens import create_access_token
 from packages.settings import settings
@@ -109,6 +110,25 @@ def logout_all(p: Principal = Depends(get_principal)):
     p.user.token_version += 1
 
 
+def _reset_unverified_access(db: Session, user_id) -> None:
+    """Undo everything that may have been set up while the address was unverified:
+    other members in tenants this user owns are removed, and memberships in tenants
+    the user does not own are dropped."""
+    for m in _memberships(db, user_id):
+        set_context(db, m.tenant_id, user_id)
+        if m.role == "owner":
+            others = (db.query(TenantMembership)
+                      .filter(TenantMembership.tenant_id == m.tenant_id, TenantMembership.user_id != user_id).all())
+            for o in others:
+                db.delete(o)
+            audit(db, m.tenant_id, user_id, "auth.unverified_link_reset", str(user_id),
+                  {"removed_members": [str(o.user_id) for o in others]})
+        else:
+            db.delete(m)
+    db.flush()
+    set_context(db, None, user_id)
+
+
 @router.get("/google")
 def google_login():
     if not oidc.is_configured():
@@ -139,6 +159,7 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
             if not user.email_verified:
                 user.hashed_password = None
                 user.token_version += 1
+                _reset_unverified_access(db, user.id)
             user.google_sub = info["sub"]
             user.email_verified = True
     if user is None:

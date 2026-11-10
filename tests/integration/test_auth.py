@@ -73,6 +73,8 @@ def test_google_link_drops_unverified_password(make_account, client, monkeypatch
     from packages.security import oidc
 
     a = make_account("victim")
+    attacker = make_account("attacker")
+    assert a.post("/api/v1/tenants/current/members", json={"email": attacker.email, "role": "admin"}).status_code == 201
     oidc_state = {"verifier": "v", "nonce": "n", "next": None}
     monkeypatch.setattr(oidc, "consume_state", lambda s: oidc_state)
 
@@ -89,3 +91,6 @@ def test_google_link_drops_unverified_password(make_account, client, monkeypatch
     assert r.status_code == 200
     assert a.get("/api/v1/auth/me").status_code == 401  # old sessions revoked
     assert client.post("/api/v1/auth/login", json={"email": a.email, "password": PASSWORD}).status_code == 401
+    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    members = client.get("/api/v1/tenants/current/members", headers=h).json()
+    assert [m["email"] for m in members] == [a.email]  # attacker removed

@@ -2,10 +2,11 @@
 # Consistent PostgreSQL backup (custom format) + object storage snapshot.
 # Usage: scripts/backup.sh [backup_dir]   (default: var/backups)
 set -euo pipefail
+umask 077  # dumps contain personal data
 cd "$(dirname "$0")/.."
 DIR="${1:-var/backups}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "$DIR"
+mkdir -p "$DIR" && chmod 700 "$DIR"
 docker compose exec -T db pg_dump -U nexussaas -d nexussaas -Fc --no-owner > "$DIR/db-$STAMP.dump"
 if [ -d var/objects ]; then
   tar -C var -czf "$DIR/objects-$STAMP.tar.gz" objects

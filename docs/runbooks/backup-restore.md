@@ -7,3 +7,4 @@
   Restoring over the live DB requires `FORCE=1` and stopped API/worker.
 - Verified 10 Nov 2026: backup and restore round trip, counts identical, RLS intact.
 - Monthly: run a restore into a scratch DB and compare counts (restore test).
+- Backups enthalten personenbezogene Daten: Skript setzt umask 077 / chmod 700; für Offsite-Kopien verschlüsseln (z.B. age/gpg).

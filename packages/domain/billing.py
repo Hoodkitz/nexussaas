@@ -107,7 +107,8 @@ def _apply(db, event: dict) -> str:
         return "processed"
 
     # Subscription lifecycle: apply only if newer than what we have (out-of-order safe).
-    if created < sub.last_event_created:
+    # Ties: a same-second event must never revive a canceled subscription.
+    if created < sub.last_event_created or (created == sub.last_event_created and sub.status == "canceled"):
         audit(db, tenant.id, None, "billing.stale_event_skipped", event["id"], {"type": etype})
         return "stale"
     status = "canceled" if etype == "customer.subscription.deleted" else obj.get("status", "active")

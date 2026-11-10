@@ -53,6 +53,8 @@ def delete_me(req: DeleteIn, p: Principal = Depends(get_principal)):
     to_delete, to_leave = [], []
     for m in ms:
         set_context(p.db, m.tenant_id, p.user_id)
+        # Lock the tenant: membership changes take the same lock, so the counts below stay valid.
+        p.db.get(Tenant, m.tenant_id, with_for_update=True)
         owners = p.db.query(TenantMembership).filter(TenantMembership.tenant_id == m.tenant_id,
                                                      TenantMembership.role == "owner").count()
         members = p.db.query(TenantMembership).filter(TenantMembership.tenant_id == m.tenant_id).count()

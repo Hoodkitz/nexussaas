@@ -101,3 +101,11 @@ def test_unknown_tenant_and_type_ignored(client):
 def test_checkout_requires_owner_and_config(make_account, client):
     a = make_account()
     assert a.post("/api/v1/billing/checkout").status_code == 503  # not configured in tests
+
+
+def test_same_second_event_cannot_revive_canceled(client, make_account):
+    a = make_account()
+    now = int(time.time())
+    post(client, sub_event(a.tenant_id, "canceled", now, etype="customer.subscription.deleted"))
+    assert post(client, sub_event(a.tenant_id, "active", now)).json()["status"] == "stale"
+    assert a.get("/api/v1/billing/subscription").json()["status"] == "canceled"

@@ -59,6 +59,7 @@ def members(p: Principal = Depends(require("read"))):
 
 @router.post("/current/members", response_model=MemberOut, status_code=201)
 def add_member(req: MemberIn, p: Principal = Depends(require("admin"))):
+    _lock_tenant(p)
     user = p.db.query(User).filter(User.email == req.email.lower(), User.is_active.is_(True)).one_or_none()
     if user is None:
         raise HTTPException(404, "Kein Konto mit dieser E-Mail; die Person muss sich zuerst registrieren")
@@ -79,6 +80,11 @@ def _membership(p: Principal, user_id: str) -> TenantMembership:
     return m
 
 
+def _lock_tenant(p: Principal) -> None:
+    """Serialize membership changes per tenant (owner invariants, account erasure)."""
+    p.db.get(Tenant, p.tenant_id, with_for_update=True)
+
+
 def _owners(p: Principal) -> int:
     return p.db.query(TenantMembership).filter(TenantMembership.tenant_id == p.tenant_id,
                                                TenantMembership.role == "owner").count()
@@ -86,6 +92,7 @@ def _owners(p: Principal) -> int:
 
 @router.patch("/current/members/{user_id}", response_model=MemberOut)
 def change_role(user_id: str, req: MemberRoleIn, p: Principal = Depends(require("admin"))):
+    _lock_tenant(p)
     m = _membership(p, user_id)
     # Only owners may grant or revoke owner; admins cannot touch owners.
     if (req.role == "owner" or m.role == "owner") and p.role != "owner":
@@ -100,6 +107,7 @@ def change_role(user_id: str, req: MemberRoleIn, p: Principal = Depends(require(
 
 @router.delete("/current/members/{user_id}", status_code=204)
 def remove_member(user_id: str, p: Principal = Depends(require("read"))):
+    _lock_tenant(p)
     m = _membership(p, user_id)
     is_self = m.user_id == p.user_id
     if not is_self:

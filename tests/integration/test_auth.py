@@ -65,3 +65,27 @@ def test_google_not_configured_or_url(client, monkeypatch):
 
 def test_google_callback_rejects_unknown_state(client):
     assert client.get("/api/v1/auth/google/callback", params={"code": "x", "state": "nope"}).status_code == 400
+
+
+def test_google_link_drops_unverified_password(make_account, client, monkeypatch):
+    """Pre-hijacking: a password set by someone else on an unverified account is removed."""
+    from apps.api.routers import auth as auth_router
+    from packages.security import oidc
+
+    a = make_account("victim")
+    oidc_state = {"verifier": "v", "nonce": "n", "next": None}
+    monkeypatch.setattr(oidc, "consume_state", lambda s: oidc_state)
+
+    async def fake_exchange(code, verifier):
+        return {"access_token": "x"}
+
+    async def fake_info(tok):
+        return {"sub": "google-sub-" + a.email, "email": a.email, "email_verified": True, "name": "V"}
+
+    monkeypatch.setattr(oidc, "exchange_code", fake_exchange)
+    monkeypatch.setattr(oidc, "fetch_userinfo", fake_info)
+    assert auth_router.oidc is oidc
+    r = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
+    assert r.status_code == 200
+    assert a.get("/api/v1/auth/me").status_code == 401  # old sessions revoked
+    assert client.post("/api/v1/auth/login", json={"email": a.email, "password": PASSWORD}).status_code == 401

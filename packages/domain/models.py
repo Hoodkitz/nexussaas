@@ -64,6 +64,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=True)
     google_sub = Column(String(255), unique=True, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
     token_version = Column(Integer, nullable=False, default=0)
     anonymized_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

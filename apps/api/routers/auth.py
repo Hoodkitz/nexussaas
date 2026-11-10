@@ -133,10 +133,18 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
     if user is None:
         user = db.query(User).filter(User.email == email).one_or_none()
         if user is not None:
+            # Google proved ownership of the address. If the existing account was never
+            # verified, someone else may have pre-registered it: drop its password and
+            # revoke all sessions so only the verified owner keeps access.
+            if not user.email_verified:
+                user.hashed_password = None
+                user.token_version += 1
             user.google_sub = info["sub"]
+            user.email_verified = True
     if user is None:
         _pilot_check(email)
-        user = User(id=uuid.uuid4(), email=email, name=info.get("name"), google_sub=info["sub"])
+        user = User(id=uuid.uuid4(), email=email, name=info.get("name"), google_sub=info["sub"],
+                    email_verified=True)
         db.add(user)
         db.flush()
         create_tenant(db, user.id, f"{info.get('name') or email.split('@')[0]}s Workspace")

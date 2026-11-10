@@ -48,7 +48,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 if path.startswith("/api/v1/auth/"):
                     scope, key, limit = "auth", f"auth:ip:{_client_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MINUTE
                 else:
-                    scope, key, limit = "api", f"api:{tid or subject}", settings.RATE_LIMIT_PER_MINUTE
+                    # Keyed per user (or IP), never per tenant claim: a token for a tenant
+                    # the caller no longer belongs to must not consume that tenant's budget.
+                    scope, key, limit = "api", f"api:{subject}", settings.RATE_LIMIT_PER_MINUTE
                 allowed, remaining = check_rate_limit(key, limit, 60)
                 if not allowed:
                     RATE_LIMITED.labels(scope).inc()

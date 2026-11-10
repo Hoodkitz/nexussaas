@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.deps import Principal, db_session, get_principal
 from apps.api.schemas.models import LoginIn, MeOut, RegisterIn, SwitchTenantIn, TokenOut, UserOut
-from packages.domain.models import Tenant, TenantMembership, User
+from packages.domain.models import AuditLog, Tenant, TenantMembership, User
 from packages.domain.tenancy import create_tenant
 from packages.observability.metrics import AUTH_EVENTS
 from packages.security import oidc
@@ -111,20 +111,30 @@ def logout_all(p: Principal = Depends(get_principal)):
 
 
 def _reset_unverified_access(db: Session, user_id) -> None:
-    """Undo everything that may have been set up while the address was unverified:
-    other members in tenants this user owns are removed, and memberships in tenants
-    the user does not own are dropped."""
+    """Undo membership grants made while the address was unverified.
+
+    Only memberships this account itself granted (per audit log) are removed. Members
+    added by other principals, other owners, and the user's own memberships stay.
+    """
     for m in _memberships(db, user_id):
         set_context(db, m.tenant_id, user_id)
-        if m.role == "owner":
-            others = (db.query(TenantMembership)
-                      .filter(TenantMembership.tenant_id == m.tenant_id, TenantMembership.user_id != user_id).all())
-            for o in others:
+        granted = {
+            row.target for row in db.query(AuditLog.target).filter(
+                AuditLog.tenant_id == m.tenant_id, AuditLog.actor_id == user_id,
+                AuditLog.action == "member.added")
+        }
+        granted.discard(str(user_id))
+        removed = []
+        for target in granted:
+            o = (db.query(TenantMembership)
+                 .filter(TenantMembership.tenant_id == m.tenant_id, TenantMembership.user_id == uuid.UUID(target))
+                 .one_or_none())
+            if o is not None:
                 db.delete(o)
-            audit(db, m.tenant_id, user_id, "auth.unverified_link_reset", str(user_id),
-                  {"removed_members": [str(o.user_id) for o in others]})
-        else:
-            db.delete(m)
+                removed.append(target)
+        if removed:
+            audit(db, m.tenant_id, user_id, "auth.unverified_grants_revoked", str(user_id),
+                  {"removed_members": sorted(removed)})
     db.flush()
     set_context(db, None, user_id)
 

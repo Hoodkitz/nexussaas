@@ -75,6 +75,9 @@ def test_google_link_drops_unverified_password(make_account, client, monkeypatch
     a = make_account("victim")
     attacker = make_account("attacker")
     assert a.post("/api/v1/tenants/current/members", json={"email": attacker.email, "role": "admin"}).status_code == 201
+    # A co-owner tenant created by someone else keeps its other members.
+    other = make_account("other")
+    assert other.post("/api/v1/tenants/current/members", json={"email": a.email, "role": "admin"}).status_code == 201
     oidc_state = {"verifier": "v", "nonce": "n", "next": None}
     monkeypatch.setattr(oidc, "consume_state", lambda s: oidc_state)
 
@@ -93,4 +96,6 @@ def test_google_link_drops_unverified_password(make_account, client, monkeypatch
     assert client.post("/api/v1/auth/login", json={"email": a.email, "password": PASSWORD}).status_code == 401
     h = {"Authorization": f"Bearer {r.json()['access_token']}"}
     members = client.get("/api/v1/tenants/current/members", headers=h).json()
-    assert [m["email"] for m in members] == [a.email]  # attacker removed
+    assert [m["email"] for m in members] == [a.email]  # attacker grant revoked
+    emails = {m["email"] for m in other.get("/api/v1/tenants/current/members").json()}
+    assert emails == {other.email, a.email}  # grants by others untouched

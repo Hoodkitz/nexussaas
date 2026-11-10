@@ -13,3 +13,8 @@ RLS mit Default-Deny; FORCE ROW LEVEL SECURITY. Anwendungsrolle kein Tabellenown
 - Defense-in-Depth, kein Ersatz für API-Autorisierung
 - Connection-Pool-Reuse muss getestet werden
 - Backup-Prozesse müssen RLS berücksichtigen
+
+## Implementierung (v0.2)
+Rolle `nexus_app` ohne SUPERUSER/BYPASSRLS; FORCE RLS auf allen Tenant-Tabellen; Kontext per
+`set_config(..., true)` je Transaktion; leerer Kontext = keine Zeilen. Zwei eng begrenzte SECURITY-DEFINER-Funktionen
+(`system_stale_jobs`, `system_tenant_for_customer`).

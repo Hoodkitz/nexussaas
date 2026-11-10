@@ -1,5 +1,5 @@
 """Step-by-step blueprint query engine for NexusSaaS."""
-from packages.blueprint.template import QUERY_PHASES, BlueprintTemplate
+from packages.blueprint.template import QUERY_PHASES
 
 class BlueprintQueryEngine:
     """Interactive blueprint creation through step-by-step questioning."""

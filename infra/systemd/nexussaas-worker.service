@@ -1,0 +1,14 @@
+[Unit]
+Description=NexusSaaS worker (dev)
+After=network-online.target docker.service
+
+[Service]
+WorkingDirectory=%h/nexussaas
+ExecStart=%h/nexussaas/.venv/bin/python -m apps.worker.main
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=180
+
+[Install]
+WantedBy=default.target

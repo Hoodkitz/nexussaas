@@ -42,6 +42,17 @@ def _job(p: Principal, job_id: str, lock: bool = False) -> Job:
     return job
 
 
+MAX_MANUAL_RETRIES = 3
+
+
+def _active_tenant(p: Principal, lock: bool = False) -> Tenant:
+    """Every path that dispatches work must pass this gate."""
+    tenant = p.db.get(Tenant, p.tenant_id, with_for_update=lock)
+    if tenant is None or tenant.status not in ("active", "pilot"):
+        raise HTTPException(403, "Tenant ist gesperrt")
+    return tenant
+
+
 @router.post("", response_model=JobOut, status_code=201)
 def create_job(req: JobCreate, response: Response, p: Principal = Depends(require("write")),
                idempotency_key: Optional[str] = Header(default=None, max_length=255)):
@@ -56,9 +67,8 @@ def create_job(req: JobCreate, response: Response, p: Principal = Depends(requir
     ok, errors = validate_blueprint(req.blueprint)
     if not ok:
         raise HTTPException(422, detail={"blueprint_errors": errors})
-    tenant = p.db.get(Tenant, p.tenant_id)
-    if tenant.status not in ("active", "pilot"):
-        raise HTTPException(403, "Tenant ist gesperrt")
+    # Row lock serializes concurrent submissions per tenant, so the quota check is exact.
+    tenant = _active_tenant(p, lock=True)
     month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     used = p.db.query(func.count(Job.id)).filter(Job.tenant_id == p.tenant_id,
                                                  Job.created_at >= month_start).scalar()
@@ -101,6 +111,7 @@ def job_events(job_id: str, p: Principal = Depends(require("read"))):
 @router.post("/{job_id}/decision", response_model=JobOut)
 def decide(job_id: str, req: JobDecisionIn, p: Principal = Depends(require("approve"))):
     """Human approval gate (blueprint approval and release approval)."""
+    _active_tenant(p)
     job = _job(p, job_id, lock=True)
     if job.status not in {s.value for s in APPROVAL_STATUSES}:
         raise HTTPException(409, f"Job wartet nicht auf eine Freigabe (Status {job.status})")
@@ -128,13 +139,19 @@ def cancel(job_id: str, p: Principal = Depends(require("write"))):
 
 @router.post("/{job_id}/retry", response_model=JobOut)
 def retry(job_id: str, p: Principal = Depends(require("write"))):
+    _active_tenant(p)
     job = _job(p, job_id, lock=True)
     if job.status != JobStatus.FAILED.value:
         raise HTTPException(409, "Nur fehlgeschlagene Jobs können neu gestartet werden")
+    retries = (p.db.query(func.count(JobEvent.id))
+               .filter(JobEvent.job_id == job.id, JobEvent.detail["manual_retry"].astext == "true").scalar())
+    if retries >= MAX_MANUAL_RETRIES:
+        raise HTTPException(429, f"Maximal {MAX_MANUAL_RETRIES} manuelle Neustarts pro Job")
     job.status, job.attempt, job.error = JobStatus.RECEIVED.value, 0, None
     p.db.add(JobEvent(tenant_id=p.tenant_id, job_id=job.id, status=job.status, actor_id=p.user_id,
                       detail={"manual_retry": True}))
     dispatch(p.db, job, "start")
+    audit(p.db, p.tenant_id, p.user_id, "job.retried", str(job.id))
     return _out(job)
 
 

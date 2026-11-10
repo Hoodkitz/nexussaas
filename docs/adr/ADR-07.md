@@ -14,3 +14,6 @@ Gesetzliche Aufbewahrung und Art.-17-Ausnahmen dokumentieren.
 - Deletion Registry beim Restore anwenden
 - Backups "beyond use" halten
 - Crypto-Shredding als Option bewerten
+
+## Implementierung (v0.2)
+`DELETE /api/v1/users/me` löscht hart (siehe docs/runbooks/data-deletion.md).

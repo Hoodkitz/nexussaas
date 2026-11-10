@@ -128,7 +128,7 @@ Nur JSON, keine anderen Texte."""
                 "sources": sources if sources else ["NexusSaaS Blueprint Engine"],
                 "follow_up_questions": clean_followups
             }
-    except (json.JSONDecodeError, Exception) as e:
+    except (json.JSONDecodeError, Exception):
         pass
     
     # Fallback: return raw response

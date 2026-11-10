@@ -31,7 +31,7 @@ def test_switch_tenant_requires_membership(make_account):
 
 
 def test_members_list_scoped(make_account):
-    a, b = make_account("a"), make_account("b")
+    a, _b = make_account("a"), make_account("b")
     emails = {m["email"] for m in a.get("/api/v1/tenants/current/members").json()}
     assert emails == {a.email}
 

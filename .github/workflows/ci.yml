@@ -9,14 +9,31 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nexussaas
+          POSTGRES_PASSWORD: nexussaas
+          POSTGRES_DB: nexussaas
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nexussaas" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql+psycopg2://nexus_app:nexus_app@localhost:5432/nexussaas
+      MIGRATION_DATABASE_URL: postgresql+psycopg2://nexussaas:nexussaas@localhost:5432/nexussaas
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-only-secret-key-ci-only-secret-key-123456
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run tests
-        run: python -m pytest tests/ -q
-      - name: Type check
-        run: python -c "import apps.api.main; print('import ok')"
+      - run: pip install -r requirements.txt
+      - run: python -m ruff check apps packages tests migrations
+      - run: python -m alembic upgrade head
+      - run: docker build -t nexussaas-sandbox:latest infra/sandbox
+      - run: python -m pytest -q

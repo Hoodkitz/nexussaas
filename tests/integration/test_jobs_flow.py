@@ -97,7 +97,11 @@ def test_reproducible_artifacts(make_account, worker):
     shas = []
     for _ in range(2):
         jid = _submit(a)
-        worker.drain(); _approve(a, jid); worker.drain(); _approve(a, jid); worker.drain()
+        worker.drain()
+        _approve(a, jid)
+        worker.drain()
+        _approve(a, jid)
+        worker.drain()
         shas.append(a.get(f"/api/v1/jobs/{jid}").json()["artifact_sha256"])
     assert shas[0] == shas[1]
 
@@ -247,7 +251,9 @@ def test_job_state_holds_only_refs(make_account, worker):
     """ADR-03: checkpoints store keys and small summaries, not generated code."""
     a = make_account()
     jid = _submit(a)
-    worker.drain(); _approve(a, jid); worker.drain()
+    worker.drain()
+    _approve(a, jid)
+    worker.drain()
     from sqlalchemy import text
 
     from packages.storage.db import engine
@@ -268,3 +274,31 @@ def test_duplicate_blueprint_approval_does_not_release(make_account, worker):
     _approve(a, jid)  # double click before the worker ran
     worker.drain()
     assert _status(a, jid) == "HUMAN_RELEASE_APPROVAL"
+
+
+def test_suspended_tenant_cannot_dispatch(make_account, worker):
+    from packages.domain.models import Tenant
+    from packages.storage.db import scoped_session
+
+    a = make_account()
+    jid = _submit(a)
+    with scoped_session(a.tenant_id) as db:
+        db.get(Tenant, uuid.UUID(a.tenant_id)).status = "suspended"
+    assert a.post("/api/v1/jobs", json={"blueprint": BLUEPRINT}).status_code == 403
+    assert a.post(f"/api/v1/jobs/{jid}/retry").status_code == 403
+    assert worker.drain()[0]["outcome"] == "skipped"
+    assert _status(a, jid) == "RECEIVED"
+
+
+def test_concurrent_submissions_respect_quota(make_account):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from packages.domain.models import Tenant
+    from packages.storage.db import scoped_session
+
+    a = make_account()
+    with scoped_session(a.tenant_id) as db:
+        db.get(Tenant, uuid.UUID(a.tenant_id)).monthly_job_quota = 3
+    with ThreadPoolExecutor(8) as pool:
+        codes = list(pool.map(lambda _: a.post("/api/v1/jobs", json={"blueprint": BLUEPRINT}).status_code, range(8)))
+    assert codes.count(201) == 3 and codes.count(429) == 5

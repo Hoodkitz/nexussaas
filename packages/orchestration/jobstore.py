@@ -3,13 +3,19 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from packages.domain.models import Job, JobEvent, JobStatus, OutboxEvent
+from packages.domain.models import Job, JobEvent, JobStatus, OutboxEvent, Tenant
 from packages.storage.db import scoped_session
 
 
 def get_job(tenant_id: str, job_id: str) -> Optional[Job]:
     with scoped_session(tenant_id) as db:
         return db.get(Job, job_id)
+
+
+def tenant_active(tenant_id: str) -> bool:
+    with scoped_session(tenant_id) as db:
+        t = db.get(Tenant, tenant_id)
+        return t is not None and t.status in ("active", "pilot")
 
 
 def set_status(tenant_id: str, job_id: str, status: JobStatus | str, detail: Optional[dict] = None,

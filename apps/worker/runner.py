@@ -36,6 +36,8 @@ class Runner:
         try:
             if job.status in TERMINAL:
                 return {"outcome": "skipped", "reason": f"job is {job.status}"}
+            if not jobstore.tenant_active(tenant_id):
+                return {"outcome": "skipped", "reason": "tenant suspended"}
             config = {"configurable": {"thread_id": job_id}}
             snapshot = self.graph.get_state(config)
             waiting = bool(snapshot.next) and any(t.interrupts for t in snapshot.tasks)

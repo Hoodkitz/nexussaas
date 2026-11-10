@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.middleware import RequestContextMiddleware
-from apps.api.routers import auth, blueprint, health, jobs, tenants
+from apps.api.routers import auth, billing, blueprint, health, jobs, privacy, tenants
 from packages.observability.logging import setup_logging
 from packages.settings import settings
 
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
 
-for r in (health, auth, tenants, jobs):
+for r in (health, auth, tenants, jobs, billing, privacy):
     app.include_router(r.router)
 app.include_router(blueprint.router, prefix="/api/v1")
 

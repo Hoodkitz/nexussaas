@@ -13,3 +13,7 @@ Externe Nebenwirkungen über Outbox/Worker.
 - Event-ID mit UNIQUE constraint
 - Schnelle 2xx nach persistierter Annahme
 - Verarbeitung asynchron über Worker
+
+## Implementierung (v0.2)
+`packages/domain/billing.py`: `INSERT ... ON CONFLICT DO NOTHING` auf `webhook_inbox.event_id` und Zustandsänderung in
+einer Transaktion; Abo-Events nur angewendet, wenn `event.created >= last_event_created`.

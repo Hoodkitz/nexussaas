@@ -65,6 +65,11 @@ def test_pid_limit_stops_fork_bomb():
     r = run("import os, sys\nn=0\ntry:\n    for _ in range(1000):\n        if os.fork() == 0:\n"
             "            import time; time.sleep(5); os._exit(0)\n        n += 1\nexcept OSError:\n    pass\n"
             "print('FORKS', n)\nsys.stdout.flush()\nos._exit(0)\n")
+    if "FORKS" not in r["stdout"]:
+        # gVisor (runsc) kills the whole sandbox when the PID limit is hit
+        # instead of returning EAGAIN from fork(): contained, but no output.
+        assert r["exit_code"] != 0 and not r["timed_out"]
+        return
     forks = int(r["stdout"].split("FORKS")[1].split()[0])
     assert forks < 200
 

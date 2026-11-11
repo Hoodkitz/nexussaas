@@ -54,17 +54,24 @@ def send_verification_mail(user: User) -> None:
               "ignoriere diese Nachricht.\n")))
 
 
-def _discard_unverified_account(db: Session, user: User) -> None:
+def _secure_unverified_account(db: Session, user: User) -> None:
+    """The mailbox was just proven for an account that never proved it. Keep the owner's own data, but remove
+    everything a squatter could have planted: other people in its workspaces, its memberships in foreign
+    workspaces, the unproven password and every session."""
     for m in _memberships(db, user.id):
         set_context(db, m.tenant_id, user.id)
-        others = db.query(TenantMembership).filter(TenantMembership.tenant_id == m.tenant_id,
-                                                   TenantMembership.user_id != user.id).count()
-        if others == 0:
-            db.query(Tenant).filter(Tenant.id == m.tenant_id).delete()
+        if m.role == "owner":
+            db.query(TenantMembership).filter(TenantMembership.tenant_id == m.tenant_id,
+                                              TenantMembership.user_id != user.id).delete()
+        else:
+            db.query(TenantMembership).filter(TenantMembership.tenant_id == m.tenant_id,
+                                              TenantMembership.user_id == user.id).delete()
     set_context(db, None, user.id)
-    db.query(User).filter(User.id == user.id).delete()  # remaining memberships cascade
+    user.hashed_password = None
+    user.token_version = (user.token_version or 0) + 1
+    user.email_verified = True
     db.flush()
-    AUTH_EVENTS.labels("unverified_account_discarded").inc()
+    AUTH_EVENTS.labels("unverified_account_secured").inc()
 
 
 def _memberships(db: Session, user_id) -> list[TenantMembership]:
@@ -216,16 +223,9 @@ async def password_reset_confirm(request: Request, db: Session = Depends(db_sess
     if not user.is_active:
         return _page("Passwort zurücksetzen", "<p>Dieses Konto ist deaktiviert.</p>", 403)
     if not user.email_verified:
-        # Mailbox proven only now: content of the unproven account may be a squatter's. Start fresh, like Google.
-        email, name = user.email, None
-        _discard_unverified_account(db, user)
-        user = User(id=uuid.uuid4(), email=email, name=name, hashed_password=hash_password(pw), email_verified=True)
-        db.add(user)
-        db.flush()
-        create_tenant(db, user.id, f"{email.split('@')[0]}s Workspace")
-    else:
-        user.hashed_password = hash_password(pw)
-        user.token_version = (user.token_version or 0) + 1  # every existing session ends
+        _secure_unverified_account(db, user)  # mailbox proven now: drop anything a squatter could have planted
+    user.hashed_password = hash_password(pw)
+    user.token_version = (user.token_version or 0) + 1  # every existing session ends
     db.commit()
     AUTH_EVENTS.labels("password_reset").inc()
     return _page("Passwort geändert", "<p>Dein neues Passwort ist gespeichert. Melde dich jetzt in der App an.</p>")
@@ -314,13 +314,10 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
             if not user.is_active:
                 raise HTTPException(403, "Konto deaktiviert")
             if not user.email_verified:
-                # The address was never proven by that password account, but Google just proved it for this
-                # person. Nothing of the unproven account may carry over (it could be a squatter's, with planted
-                # members or data): delete it and its sole-member workspaces, then sign up the real owner fresh.
-                _discard_unverified_account(db, user)
-                user = None
-            else:
-                user.google_sub = info["sub"]
+                # Google just proved the address for this person: secure the unproven account (no foreign
+                # members, no old password or sessions) and hand it over; the owner's own data stays.
+                _secure_unverified_account(db, user)
+            user.google_sub = info["sub"]
     if user is None:
         _pilot_check(email)
         user = User(id=uuid.uuid4(), email=email, name=info.get("name"), google_sub=info["sub"],

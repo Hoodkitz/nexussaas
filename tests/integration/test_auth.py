@@ -82,14 +82,18 @@ def _fake_google(monkeypatch, sub, email):
     monkeypatch.setattr(oidc, "fetch_userinfo", fake_info)
 
 
-def test_google_owner_replaces_unverified_squatter_account(make_account, client, monkeypatch):
-    """Pre-hijacking: someone registered the address without proving it. The verified Google owner gets a fresh
-    account; the squatter's password, sessions and workspace are gone."""
+def test_google_owner_secures_unverified_account(make_account, client, monkeypatch):
+    """Pre-hijacking: someone registered the address without proving it and added a second account to the
+    workspace. The verified Google owner gets the account; password, sessions and planted members are gone."""
     a = make_account("prehijacked")
+    helper = make_account("helper")
+    assert a.post("/api/v1/tenants/current/members", json={"email": helper.email, "role": "admin"}).status_code == 201
     _fake_google(monkeypatch, "sub-" + a.email, a.email)
     r = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
-    assert r.status_code == 200
-    assert r.json()["tenant_id"] != a.tenant_id
+    assert r.status_code == 200 and r.json()["tenant_id"] == a.tenant_id  # own data kept
+    owner = {"Authorization": "Bearer " + r.json()["access_token"]}
+    members = client.get("/api/v1/tenants/current/members", headers=owner).json()
+    assert [m["email"] for m in members] == [a.email]  # planted member removed
     assert a.get("/api/v1/auth/me").status_code == 401  # squatter's token revoked
     assert client.post("/api/v1/auth/login", json={"email": a.email, "password": PASSWORD}).status_code == 401
 

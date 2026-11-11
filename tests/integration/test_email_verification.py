@@ -85,3 +85,14 @@ def test_password_reset_single_use(make_account, client):
     r = client.post("/api/v1/auth/password-reset/confirm", content=f"token={token}&password=Anders12345x&password2=Anders12345x",
                     headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 400  # single use
+
+
+def test_reset_on_unverified_account_starts_fresh(make_account, client):
+    import re
+    a = make_account("squat")
+    client.post("/api/v1/auth/password-reset", json={"email": a.email})
+    token = re.search(r"token=([\w.-]+)", [m for m in get_mailer().sent if m.to == a.email][-1].text).group(1)
+    client.post("/api/v1/auth/password-reset/confirm", content=f"token={token}&password=Frisch12345x&password2=Frisch12345x",
+                headers={"Content-Type": "application/x-www-form-urlencoded"})
+    r = client.post("/api/v1/auth/login", json={"email": a.email, "password": "Frisch12345x"})
+    assert r.status_code == 200 and r.json()["tenant_id"] != a.tenant_id  # squatter's workspace not inherited

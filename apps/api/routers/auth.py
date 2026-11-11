@@ -213,9 +213,19 @@ async def password_reset_confirm(request: Request, db: Session = Depends(db_sess
     problems = validate_password_strength(pw)
     if problems:
         return _page("Neues Passwort", "<p>" + html.escape(" ".join(problems)) + " Bitte den Link erneut öffnen.</p>", 422)
-    user.hashed_password = hash_password(pw)
-    user.token_version = (user.token_version or 0) + 1  # every existing session ends
-    user.email_verified = True  # the mailbox was just proven
+    if not user.is_active:
+        return _page("Passwort zurücksetzen", "<p>Dieses Konto ist deaktiviert.</p>", 403)
+    if not user.email_verified:
+        # Mailbox proven only now: content of the unproven account may be a squatter's. Start fresh, like Google.
+        email, name = user.email, None
+        _discard_unverified_account(db, user)
+        user = User(id=uuid.uuid4(), email=email, name=name, hashed_password=hash_password(pw), email_verified=True)
+        db.add(user)
+        db.flush()
+        create_tenant(db, user.id, f"{email.split('@')[0]}s Workspace")
+    else:
+        user.hashed_password = hash_password(pw)
+        user.token_version = (user.token_version or 0) + 1  # every existing session ends
     db.commit()
     AUTH_EVENTS.labels("password_reset").inc()
     return _page("Passwort geändert", "<p>Dein neues Passwort ist gespeichert. Melde dich jetzt in der App an.</p>")
@@ -301,6 +311,8 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
     if user is None:
         user = db.query(User).filter(User.email == email).one_or_none()
         if user is not None:
+            if not user.is_active:
+                raise HTTPException(403, "Konto deaktiviert")
             if not user.email_verified:
                 # The address was never proven by that password account, but Google just proved it for this
                 # person. Nothing of the unproven account may carry over (it could be a squatter's, with planted

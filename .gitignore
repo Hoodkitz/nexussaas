@@ -9,3 +9,5 @@ venv/
 .env
 var/
 .ruff_cache/
+.env.*
+!.env.example

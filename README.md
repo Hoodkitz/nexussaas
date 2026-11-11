@@ -4,7 +4,7 @@ Multi-tenant SaaS platform that turns an app **blueprint** into a tested, packag
 FastAPI backend through a LangGraph workflow with human approval gates.
 Specification: [spec/nexussaas-spec.md](spec/nexussaas-spec.md).
 
-## Status (v0.2.0, 10 Nov 2026)
+## Status (v0.2.1, 11 Nov 2026)
 
 | Phase | Scope | State |
 |---|---|---|
@@ -13,7 +13,7 @@ Specification: [spec/nexussaas-spec.md](spec/nexussaas-spec.md).
 | 2 Identity & tenants | Argon2id login, Google OIDC (code + PKCE), JWT revocation, tenants, RBAC, FORCE RLS | done, cross-tenant tests green |
 | 3 Job API + graph | outbox -> Redis queue, worker, LangGraph + Postgres checkpointer, interrupts, retry, cancel | done, crash/resume tests green |
 | 4 Synthesis | blueprint validation, DDL with RLS, code generation, static checks, security review, deterministic zip | done, reproducibility test green |
-| 5 Sandbox | hardened Docker runner (no network, read-only, cap-drop, non-root, limits) | done, boundary tests green; gVisor/separate host open |
+| 5 Sandbox | hardened Docker runner (no network, read-only, cap-drop, non-root, limits) under gVisor (`SANDBOX_RUNTIME=runsc`) | done, boundary tests green under runc and runsc |
 | 6 Billing/ops | Stripe Checkout + idempotent, order-safe webhooks, rate limits, quotas, backup/restore, DSGVO export/erasure | done, duplicate/reorder tests green |
 | 7 Pilot | pilot mode with allowlist, quotas, approvals, metrics | ready to start, see `docs/runbooks/pilot.md` |
 
@@ -27,8 +27,11 @@ make migrate                    # schema, app role, RLS, checkpointer tables
 make sandbox-image              # image for running generated code
 make api                        # http://127.0.0.1:8000/docs
 make worker                     # in a second shell
-make test                       # 83 tests
+make test                       # 95 tests
 ```
+
+Production-like operation on the VPS: `make install-services` (systemd user units for API + worker),
+e-mail verification via SMTP (Brevo), mobile app `matrix-app` (Capacitor) talks to the API.
 
 ## Flow
 

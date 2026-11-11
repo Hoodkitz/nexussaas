@@ -9,6 +9,7 @@ import logging
 import os
 import signal
 import socket
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -112,6 +113,16 @@ def main() -> None:  # pragma: no cover - process loop
     worker_id = f"{socket.gethostname()}-{os.getpid()}"
     r = queue.client()
     queue.heartbeat(r, worker_id)
+
+    def _beat() -> None:  # keeps the heartbeat alive while a long job (sandbox, bandit) blocks the main loop
+        hb = queue.client()
+        while not _stop:
+            try:
+                queue.heartbeat(hb, worker_id)
+            except Exception:
+                log.warning("heartbeat failed")
+            time.sleep(5)
+    threading.Thread(target=_beat, name="heartbeat", daemon=True).start()
     log.info("worker started", extra={"fields": {"worker_id": worker_id, "recovered": queue.recover_orphans(r)}})
     last_maint = 0.0
     last_slow = 0.0

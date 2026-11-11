@@ -79,12 +79,14 @@ def delete_me(req: DeleteIn, p: Principal = Depends(get_principal)):
                 p.db.execute(text(f"DELETE FROM {table} WHERE thread_id = ANY(:ids)"), {"ids": job_ids})
         p.db.query(Tenant).filter(Tenant.id == tid).delete()  # cascades jobs, events, audit, subscription
         p.db.flush()
-        deleted_objects += storage.delete_prefix(tenant_prefix(tid))
     for tid in to_leave:
         set_context(p.db, tid, p.user_id)
         audit(p.db, tid, None, "user.erased", None)  # no personal data in the record
         p.db.flush()
     set_context(p.db, None, p.user_id)
     p.db.query(User).filter(User.id == p.user_id).delete()  # memberships cascade, jobs.created_by -> NULL
+    p.db.commit()  # DB first: if it fails nothing is lost; objects of deleted tenants are removed afterwards
+    for tid in to_delete:
+        deleted_objects += storage.delete_prefix(tenant_prefix(tid))
     return {"status": "deleted", "tenants_deleted": len(to_delete), "tenants_left": len(to_leave),
             "objects_deleted": deleted_objects}

@@ -82,13 +82,15 @@ def _fake_google(monkeypatch, sub, email):
     monkeypatch.setattr(oidc, "fetch_userinfo", fake_info)
 
 
-def test_google_never_links_unverified_password_account(make_account, client, monkeypatch):
-    """Pre-hijacking: an unverified password account is never merged with a Google identity."""
+def test_google_owner_takes_over_unverified_squatter_account(make_account, client, monkeypatch):
+    """Pre-hijacking: someone registered the address without proving it. The verified Google owner gets the
+    account; the squatter's password and sessions stop working."""
     a = make_account("prehijacked")
     _fake_google(monkeypatch, "sub-" + a.email, a.email)
     r = client.get("/api/v1/auth/google/callback", params={"code": "c", "state": "s"})
-    assert r.status_code == 409
-    assert a.get("/api/v1/auth/me").status_code == 200  # nothing changed
+    assert r.status_code == 200
+    assert a.get("/api/v1/auth/me").status_code == 401  # squatter's token revoked
+    assert client.post("/api/v1/auth/login", json={"email": a.email, "password": PASSWORD}).status_code == 401
 
 
 def test_google_signup_and_relogin(client, monkeypatch):

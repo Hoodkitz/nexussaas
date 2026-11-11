@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from packages.domain.models import Job, JobEvent, JobStatus, OutboxEvent, Tenant
+from packages.domain.models import TERMINAL_STATUSES, Job, JobEvent, JobStatus, OutboxEvent, Tenant
+
+TERMINAL = {s.value for s in TERMINAL_STATUSES}
 from packages.storage.db import scoped_session
 
 
@@ -25,6 +27,8 @@ def set_status(tenant_id: str, job_id: str, status: JobStatus | str, detail: Opt
         job = db.get(Job, job_id, with_for_update=True)
         if job is None:
             return
+        if job.status in TERMINAL and job.status != status:
+            return  # cancelled/finished meanwhile (e.g. by the user): the worker never overwrites a final state
         changed = job.status != status
         job.status = status
         for k, v in fields.items():

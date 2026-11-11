@@ -92,7 +92,9 @@ Höchstens 3 Folgefragen, nur wenn wirklich Informationen für das Datenmodell f
 
 
 def _fallback(answers: dict[str, str]) -> dict:
-    desc = _clip(answers.get("app_description"), 300) or "Meine App"
+    raw = answers.get("app_description") or ""
+    raw = raw.split(" → ", 1)[-1]  # the app stores "question → answer"
+    desc = _clip(raw, 300) or "Meine App"
     name = snake(" ".join(desc.split()[:3])) or "meine_app"
     if not re.match(r"^[a-z]", name):
         name = "app_" + name
@@ -129,7 +131,11 @@ Beziehungen als Feld "<entity>_id" mit type "ref:<entity>". Englische snake_case
             bp = None
     if bp is None:
         bp, source = _fallback(req.answers), "fallback"
-    normalized = normalize_blueprint(bp)
+    try:
+        normalized = normalize_blueprint(bp)
+    except BlueprintError:  # derived name may be reserved (keyword, 'schema', ...): use the safe default name
+        bp["name"] = "meine_app"
+        normalized = normalize_blueprint(bp)
     if len(json.dumps(bp)) > 200_000:
         raise HTTPException(413, "Blueprint zu groß")
     return {"blueprint": bp, "source": source,

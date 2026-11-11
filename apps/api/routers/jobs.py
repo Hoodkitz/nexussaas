@@ -69,6 +69,11 @@ def create_job(req: JobCreate, response: Response, p: Principal = Depends(requir
         raise HTTPException(422, detail={"blueprint_errors": errors})
     # Row lock serializes concurrent submissions per tenant, so the quota check is exact.
     tenant = _active_tenant(p, lock=True)
+    if key:  # re-check under the lock: a concurrent request with the same key may have just created the job
+        existing = p.db.query(Job).filter(Job.tenant_id == p.tenant_id, Job.idempotency_key == key).one_or_none()
+        if existing:
+            response.status_code = status.HTTP_200_OK
+            return _out(existing)
     month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     used = p.db.query(func.count(Job.id)).filter(Job.tenant_id == p.tenant_id,
                                                  Job.created_at >= month_start).scalar()

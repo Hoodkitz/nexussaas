@@ -65,6 +65,7 @@ class Settings:
         self.JOB_MAX_ATTEMPTS = int(os.getenv("JOB_MAX_ATTEMPTS", "3"))
         # Outbound mail (e-mail verification): console | smtp | recording
         self.MAIL_BACKEND = os.getenv("MAIL_BACKEND", "console")
+        self.MAX_OWNED_TENANTS = int(os.getenv("MAX_OWNED_TENANTS", "3"))
         self.MAIL_FROM = os.getenv("MAIL_FROM", "NexusSaaS <no-reply@localhost>")
         self.SMTP_HOST = os.getenv("SMTP_HOST", "")
         self.SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))

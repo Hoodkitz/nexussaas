@@ -272,7 +272,19 @@ async function showDashboard() {
     document.getElementById('user-info').textContent = me.user.email + ' · ' + (me.role || '');
     await renderJobs();
   } catch (e) {
-    document.getElementById('projects-list').replaceChildren(el('p', { style: 'color:#f44' }, e.message));
+    const list = document.getElementById('projects-list');
+    if (/bestätigen/i.test(e.message)) {  // e-mail not verified yet: explain and offer to resend the link
+      const btn = el('button', { class: 'btn' }, 'Bestätigungs-Mail erneut senden');
+      btn.onclick = async () => {
+        try { await api('/auth/resend-verification', { method: 'POST' }); alert('Mail ist unterwegs – bitte Posteingang (und Spam) prüfen.'); }
+        catch (err) { alert(err.message); }
+      };
+      const again = el('button', { class: 'btn' }, 'Ich habe bestätigt – neu laden');
+      again.onclick = () => showDashboard();
+      list.replaceChildren(el('p', { style: 'color:#0a0' }, 'Fast geschafft: Bitte bestätige deine E-Mail-Adresse über den Link in unserer Mail.'), btn, again);
+    } else {
+      list.replaceChildren(el('p', { style: 'color:#f44' }, e.message));
+    }
   }
 }
 function canApprove() { return me && (me.role === 'owner' || me.role === 'admin'); }

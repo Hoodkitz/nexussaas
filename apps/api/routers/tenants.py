@@ -31,6 +31,10 @@ def _uuid(value: str) -> uuid.UUID:
 @router.post("", response_model=TokenOut, status_code=201)
 def create(req: TenantCreate, p: Principal = Depends(get_principal)):
     """Create a tenant; the caller becomes owner. Returns a token scoped to the new tenant."""
+    owned = p.db.query(TenantMembership).filter(TenantMembership.user_id == p.user_id,
+                                                TenantMembership.role == "owner").count()
+    if owned >= settings.MAX_OWNED_TENANTS:  # quotas are per tenant: unlimited tenants would bypass them
+        raise HTTPException(409, f"Höchstens {settings.MAX_OWNED_TENANTS} eigene Workspaces pro Konto")
     t = create_tenant(p.db, p.user_id, req.name, req.slug)
     return TokenOut(access_token=create_access_token(str(p.user_id), str(t.id), p.user.token_version),
                     expires_in=settings.ACCESS_TOKEN_MINUTES * 60, tenant_id=str(t.id), role="owner")

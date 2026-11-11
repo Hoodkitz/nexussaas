@@ -114,10 +114,18 @@ def verify_email(req: VerifyEmailIn, db: Session = Depends(db_session)):
     return _verify(req.token, db)
 
 
+_last_resend: dict[str, float] = {}
+
+
 @router.post("/resend-verification", status_code=202)
 def resend_verification(p: Principal = Depends(get_principal)):
     if p.user.email_verified:
         return {"status": "already_verified"}
+    import time
+    now = time.monotonic()
+    if now - _last_resend.get(str(p.user_id), -1e9) < 60:  # protects the mail quota and the recipient
+        raise HTTPException(429, "Bitte eine Minute warten, bevor die Mail erneut gesendet wird")
+    _last_resend[str(p.user_id)] = now
     send_verification_mail(p.user)
     return {"status": "sent"}
 
@@ -190,11 +198,12 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
         user = db.query(User).filter(User.email == email).one_or_none()
         if user is not None:
             if not user.email_verified:
-                # Never auto-link to an account whose address was not verified: it may have
-                # been pre-registered by someone else (account pre-hijacking). Fail closed.
-                raise HTTPException(status.HTTP_409_CONFLICT,
-                                    "Für diese E-Mail existiert bereits ein Passwort-Konto. Bitte mit "
-                                    "Passwort anmelden; Google kann danach nicht automatisch verknüpft werden.")
+                # The address was never proven by the password account, but Google just proved it for this
+                # person: they own the address. Take the account over and void the unproven password and all
+                # sessions, so a squatter who pre-registered the address loses access (anti pre-hijacking).
+                user.hashed_password = None
+                user.token_version = (user.token_version or 0) + 1
+                user.email_verified = True
             user.google_sub = info["sub"]
     if user is None:
         _pilot_check(email)

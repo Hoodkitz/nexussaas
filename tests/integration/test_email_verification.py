@@ -23,7 +23,7 @@ def test_register_sends_mail_and_link_verifies(make_account, client):
     assert client.get("/api/v1/users/me/export").status_code == 401
     token = _last_link(a.email)
     r = client.get("/api/v1/auth/verify-email", params={"token": token})
-    assert r.status_code == 200 and r.json()["status"] == "verified"
+    assert r.status_code == 200 and "bestätigt" in r.text  # the mail link shows a page
     assert a.get("/api/v1/users/me/export").json()["user"]["email_verified"] is True
     # idempotent
     assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 200
@@ -67,3 +67,21 @@ def test_require_verified_email_blocks_until_verified(make_account, client, monk
     assert a.get("/api/v1/tenants/me").status_code == 403        # gated
     client.get("/api/v1/auth/verify-email", params={"token": _last_link(a.email)})
     assert a.get("/api/v1/tenants/me").status_code != 403
+
+
+def test_password_reset_single_use(make_account, client):
+    import re
+    a = make_account("reset")
+    assert client.post("/api/v1/auth/password-reset", json={"email": a.email}).status_code == 202
+    assert client.post("/api/v1/auth/password-reset", json={"email": "nobody@example.com"}).status_code == 202
+    mail = [m for m in get_mailer().sent if m.to == a.email][-1]
+    token = re.search(r"token=([\w.-]+)", mail.text).group(1)
+    assert "Neues Passwort" in client.get("/api/v1/auth/password-reset/confirm", params={"token": token}).text
+    r = client.post("/api/v1/auth/password-reset/confirm", content=f"token={token}&password=NeuesPass123&password2=NeuesPass123",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 200 and "gespeichert" in r.text
+    assert a.get("/api/v1/auth/me").status_code == 401  # old sessions ended
+    assert client.post("/api/v1/auth/login", json={"email": a.email, "password": "NeuesPass123"}).status_code == 200
+    r = client.post("/api/v1/auth/password-reset/confirm", content=f"token={token}&password=Anders12345x&password2=Anders12345x",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 400  # single use

@@ -4,11 +4,13 @@ No OAuth2 password grant is exposed (RFC 9700); /login is a first-party form end
 """
 from __future__ import annotations
 
+import html
 import uuid
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,7 +22,7 @@ from packages.mail import Mail, get_mailer
 from packages.observability.metrics import AUTH_EVENTS
 from packages.security import oidc
 from packages.security.password import hash_password, validate_password_strength, verify_password
-from packages.security.tokens import create_access_token, create_email_token, decode_email_token
+from packages.security.tokens import create_reset_token, decode_reset_token, create_access_token, create_email_token, decode_email_token
 from packages.settings import settings
 from packages.storage.db import set_context
 
@@ -50,6 +52,19 @@ def send_verification_mail(user: User) -> None:
         text=("Hallo,\n\nbitte bestätige deine E-Mail-Adresse für NexusSaaS über diesen Link "
               f"(gültig {settings.EMAIL_VERIFY_HOURS} Stunden):\n\n{link}\n\nFalls du dich nicht registriert hast, "
               "ignoriere diese Nachricht.\n")))
+
+
+def _discard_unverified_account(db: Session, user: User) -> None:
+    for m in _memberships(db, user.id):
+        set_context(db, m.tenant_id, user.id)
+        others = db.query(TenantMembership).filter(TenantMembership.tenant_id == m.tenant_id,
+                                                   TenantMembership.user_id != user.id).count()
+        if others == 0:
+            db.query(Tenant).filter(Tenant.id == m.tenant_id).delete()
+    set_context(db, None, user.id)
+    db.query(User).filter(User.id == user.id).delete()  # remaining memberships cascade
+    db.flush()
+    AUTH_EVENTS.labels("unverified_account_discarded").inc()
 
 
 def _memberships(db: Session, user_id) -> list[TenantMembership]:
@@ -103,10 +118,23 @@ def _verify(token: str, db: Session) -> dict:
     return {"status": "verified", "email": user.email}
 
 
+def _page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
+    """Minimal page for links opened from e-mails (phone browser). Only static text plus escaped values."""
+    return HTMLResponse(status_code=status_code, content=f"""<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(title)}</title>
+<style>body{{font:16px/1.5 system-ui,sans-serif;background:#000;color:#0f0;max-width:440px;margin:40px auto;padding:0 16px}}
+input,button{{width:100%;padding:12px;margin:8px 0;font:inherit;background:#020;color:#0f0;border:1px solid #0a0;border-radius:6px}}
+button{{background:#0a0;color:#000;font-weight:700}}</style></head><body><h1>{html.escape(title)}</h1>{body}</body></html>""")
+
+
 @router.get("/verify-email")
 def verify_email_link(token: str, db: Session = Depends(db_session)):
     """Target of the link in the mail."""
-    return _verify(token, db)
+    try:
+        r = _verify(token, db)
+    except HTTPException as e:
+        return _page("Bestätigung fehlgeschlagen", f"<p>{html.escape(str(e.detail))}</p>", e.status_code)
+    return _page("E-Mail bestätigt", f"<p>{html.escape(r['email'])} ist bestätigt. Du kannst jetzt zurück in die App.</p>")
 
 
 @router.post("/verify-email")
@@ -115,6 +143,82 @@ def verify_email(req: VerifyEmailIn, db: Session = Depends(db_session)):
 
 
 _last_resend: dict[str, float] = {}
+_last_reset: dict[str, float] = {}
+
+
+class ResetRequestIn(BaseModel):
+    email: EmailStr
+
+
+@router.post("/password-reset", status_code=202)
+def request_password_reset(req: ResetRequestIn, db: Session = Depends(db_session)):
+    """Always 202 (no account enumeration). Sends a one-hour, single-use link if the account exists."""
+    import time
+    email = req.email.lower()
+    now = time.monotonic()
+    if now - _last_reset.get(email, -1e9) < 60:
+        return {"status": "sent"}
+    _last_reset[email] = now
+    user = db.query(User).filter(User.email == email).one_or_none()
+    if user is not None and user.is_active:
+        token = create_reset_token(str(user.id), user.token_version or 0, user.hashed_password)
+        link = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/auth/password-reset/confirm?token={token}"
+        try:
+            get_mailer().send(Mail(to=user.email, subject="NexusSaaS: Passwort zurücksetzen", text=(
+                "Hallo,\n\nüber diesen Link kannst du ein neues Passwort für NexusSaaS festlegen (gültig 1 Stunde, "
+                f"nur einmal verwendbar):\n\n{link}\n\nFalls du das nicht angefordert hast, ignoriere diese Nachricht – "
+                "dein Passwort bleibt unverändert.\n")))
+        except Exception:
+            AUTH_EVENTS.labels("reset_mail_failed").inc()
+    return {"status": "sent"}
+
+
+def _reset_user(token: str, db: Session) -> User:
+    try:
+        sub = jwt.decode(token, options={"verify_signature": False}).get("sub")
+        user = db.get(User, uuid.UUID(str(sub)))
+        if user is None:
+            raise ValueError
+        decode_reset_token(token, user.token_version or 0, user.hashed_password)
+    except (jwt.PyJWTError, ValueError, TypeError):
+        raise HTTPException(400, "Link ungültig, abgelaufen oder bereits verwendet")
+    return user
+
+
+@router.get("/password-reset/confirm")
+def password_reset_form(token: str, db: Session = Depends(db_session)):
+    try:
+        _reset_user(token, db)
+    except HTTPException as e:
+        return _page("Passwort zurücksetzen", f"<p>{html.escape(str(e.detail))}</p>", e.status_code)
+    return _page("Neues Passwort", f"""<form method="post" action="/api/v1/auth/password-reset/confirm">
+<input type="hidden" name="token" value="{html.escape(token)}">
+<input type="password" name="password" placeholder="Neues Passwort" minlength="10" required autocomplete="new-password">
+<input type="password" name="password2" placeholder="Wiederholen" minlength="10" required autocomplete="new-password">
+<button type="submit">Speichern</button></form>
+<p>Mindestens 10 Zeichen mit Groß-/Kleinbuchstaben und Ziffer.</p>""")
+
+
+@router.post("/password-reset/confirm")
+async def password_reset_confirm(request: Request, db: Session = Depends(db_session)):
+    from urllib.parse import parse_qs
+    form = {k: v[0] for k, v in parse_qs((await request.body())[:10_000].decode(errors="replace")).items()}
+    try:
+        user = _reset_user(form.get("token", ""), db)
+    except HTTPException as e:
+        return _page("Passwort zurücksetzen", f"<p>{html.escape(str(e.detail))}</p>", e.status_code)
+    pw = form.get("password", "")
+    if pw != form.get("password2", ""):
+        return _page("Neues Passwort", "<p>Die Passwörter stimmen nicht überein. Bitte den Link erneut öffnen.</p>", 422)
+    problems = validate_password_strength(pw)
+    if problems:
+        return _page("Neues Passwort", "<p>" + html.escape(" ".join(problems)) + " Bitte den Link erneut öffnen.</p>", 422)
+    user.hashed_password = hash_password(pw)
+    user.token_version = (user.token_version or 0) + 1  # every existing session ends
+    user.email_verified = True  # the mailbox was just proven
+    db.commit()
+    AUTH_EVENTS.labels("password_reset").inc()
+    return _page("Passwort geändert", "<p>Dein neues Passwort ist gespeichert. Melde dich jetzt in der App an.</p>")
 
 
 @router.post("/resend-verification", status_code=202)
@@ -198,13 +302,13 @@ async def google_callback(code: str, state: str, db: Session = Depends(db_sessio
         user = db.query(User).filter(User.email == email).one_or_none()
         if user is not None:
             if not user.email_verified:
-                # The address was never proven by the password account, but Google just proved it for this
-                # person: they own the address. Take the account over and void the unproven password and all
-                # sessions, so a squatter who pre-registered the address loses access (anti pre-hijacking).
-                user.hashed_password = None
-                user.token_version = (user.token_version or 0) + 1
-                user.email_verified = True
-            user.google_sub = info["sub"]
+                # The address was never proven by that password account, but Google just proved it for this
+                # person. Nothing of the unproven account may carry over (it could be a squatter's, with planted
+                # members or data): delete it and its sole-member workspaces, then sign up the real owner fresh.
+                _discard_unverified_account(db, user)
+                user = None
+            else:
+                user.google_sub = info["sub"]
     if user is None:
         _pilot_check(email)
         user = User(id=uuid.uuid4(), email=email, name=info.get("name"), google_sub=info["sub"],

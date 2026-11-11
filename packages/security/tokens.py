@@ -51,3 +51,26 @@ def decode_email_token(token: str) -> dict:
     if claims.get("typ") != "verify":
         raise jwt.InvalidTokenError("wrong token type")
     return claims
+
+
+def _pw_fingerprint(hashed_password: Optional[str]) -> str:
+    import hashlib
+    return hashlib.sha256((hashed_password or "-").encode()).hexdigest()[:16]
+
+
+def create_reset_token(user_id: str, token_version: int, hashed_password: Optional[str]) -> str:
+    """One-hour password-reset token. Single use: it is bound to the current password hash and token version,
+    both of which change when the password is set."""
+    now = datetime.now(timezone.utc)
+    claims = {"iss": ISSUER, "sub": str(user_id), "typ": "reset", "ver": token_version,
+              "pw": _pw_fingerprint(hashed_password), "iat": now, "exp": now + timedelta(hours=1)}
+    return jwt.encode(claims, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_reset_token(token: str, token_version: int, hashed_password: Optional[str]) -> dict:
+    claims = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM], issuer=ISSUER,
+                        options={"require": ["exp", "sub", "iss"]})
+    if claims.get("typ") != "reset" or claims.get("ver") != token_version or \
+            claims.get("pw") != _pw_fingerprint(hashed_password):
+        raise jwt.InvalidTokenError("reset token already used or wrong type")
+    return claims

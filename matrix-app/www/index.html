@@ -78,6 +78,7 @@ h2 { font-size: 1.5rem; margin-bottom: 15px; text-shadow: 0 0 5px #0f0; }
       <input type="password" class="input-field" id="login-pass" placeholder="Passwort" autocomplete="current-password">
       <button class="btn" onclick="doLogin()">LOGIN</button>
       <div class="auth-switch" onclick="showScreen('register-screen')">Noch kein Account? Registrieren</div>
+      <span class="small-link" onclick="forgotPassword()">Passwort vergessen?</span>
       <span class="small-link" onclick="showScreen('server-screen')">Server einstellen</span>
     </div>
   </div>
@@ -227,6 +228,14 @@ async function doLogin() {
   try {
     storeSession(await api('/auth/login', { method: 'POST', json: { email, password } }));
     await showDashboard();
+  } catch (e) { alert(e.message); }
+}
+async function forgotPassword() {
+  const email = (document.getElementById('login-email').value.trim() || prompt('Deine E-Mail-Adresse:') || '').trim();
+  if (!email) return;
+  try {
+    await api('/auth/password-reset', { method: 'POST', json: { email } });
+    alert('Falls ein Konto existiert, ist eine Mail mit einem Link zum Zurücksetzen unterwegs (1 Stunde gültig).');
   } catch (e) { alert(e.message); }
 }
 async function doRegister() {

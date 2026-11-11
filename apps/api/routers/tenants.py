@@ -31,6 +31,7 @@ def _uuid(value: str) -> uuid.UUID:
 @router.post("", response_model=TokenOut, status_code=201)
 def create(req: TenantCreate, p: Principal = Depends(get_principal)):
     """Create a tenant; the caller becomes owner. Returns a token scoped to the new tenant."""
+    p.db.query(User).filter(User.id == p.user_id).with_for_update().one()  # serialize concurrent creations
     owned = p.db.query(TenantMembership).filter(TenantMembership.user_id == p.user_id,
                                                 TenantMembership.role == "owner").count()
     if owned >= settings.MAX_OWNED_TENANTS:  # quotas are per tenant: unlimited tenants would bypass them

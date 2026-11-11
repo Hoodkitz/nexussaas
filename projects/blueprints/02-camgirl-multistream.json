@@ -1,0 +1,8 @@
+{"name": "multistream", "version": "0.1", "description": "Multi-Portal-Restreaming und Chat-Bündelung: Portal-Konten, Stream-Sessions, Ziele, Chat-Events, Begrüßungsvorlagen",
+ "entities": [
+  {"name": "PlatformAccount", "fields": [{"name": "platform", "type": "text", "required": true}, {"name": "account_username", "type": "text", "required": true}, {"name": "encrypted_credentials", "type": "text"}, {"name": "kek_version", "type": "integer"}, {"name": "active", "type": "boolean"}]},
+  {"name": "StreamSession", "fields": [{"name": "stream_key_hash", "type": "text", "required": true, "unique": true}, {"name": "protocol", "type": "text"}, {"name": "started_at", "type": "timestamp"}, {"name": "ended_at", "type": "timestamp"}, {"name": "status", "type": "text", "required": true}]},
+  {"name": "StreamTarget", "fields": [{"name": "stream_session_id", "type": "ref:StreamSession", "required": true}, {"name": "platform_account_id", "type": "ref:PlatformAccount", "required": true}, {"name": "rtmp_url", "type": "text", "required": true}, {"name": "state", "type": "text"}]},
+  {"name": "ChatEvent", "fields": [{"name": "event_id", "type": "text", "required": true, "unique": true}, {"name": "platform_account_id", "type": "ref:PlatformAccount", "required": true}, {"name": "event_type", "type": "text", "required": true}, {"name": "sender_username", "type": "text"}, {"name": "message", "type": "text", "max_length": 2000}, {"name": "tokens_spent", "type": "integer"}, {"name": "occurred_at", "type": "timestamp", "required": true}]},
+  {"name": "GreetingTemplate", "fields": [{"name": "platform", "type": "text"}, {"name": "text", "type": "text", "required": true, "max_length": 500}, {"name": "enabled", "type": "boolean"}]}
+ ]}

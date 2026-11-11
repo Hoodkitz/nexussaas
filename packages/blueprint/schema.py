@@ -121,11 +121,11 @@ def normalize_blueprint(bp: Any) -> dict:
             if fname in seen_fields:
                 errors.append(f"{ename}.{fname}: doppelt")
                 continue
-            ftype = str(f.get("type", "text")).lower().strip()
-            ftype = TYPE_ALIASES.get(ftype, ftype)
+            raw_type = str(f.get("type", "text")).strip()
+            ftype = TYPE_ALIASES.get(raw_type.lower(), raw_type.lower())
             ref = None
             if ftype.startswith("ref:"):
-                ref = snake(ftype[4:])
+                ref = snake(raw_type[4:].strip())  # keep the original casing: ref:StreamSession -> stream_session
                 ftype = "ref"
             elif ftype not in FIELD_TYPES:
                 errors.append(f"{ename}.{fname}: unbekannter Typ {ftype!r}")

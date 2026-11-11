@@ -79,3 +79,15 @@ def test_generated_code_passes_static_and_security_checks():
 def test_secret_scan_catches_secrets():
     files = {"app/x.py": 'API_KEY = "sk_live_0123456789abcdefABCD"\n'}
     assert not security_review(files, [])["passed"]
+
+
+def test_ref_to_camel_case_entity_resolves():
+    from packages.blueprint.schema import normalize_blueprint
+
+    bp = {"name": "x", "entities": [
+        {"name": "StreamSession", "fields": ["title"]},
+        {"name": "StreamTarget", "fields": [{"name": "stream_session_id", "type": "ref:StreamSession", "required": True}]},
+    ]}
+    out = normalize_blueprint(bp)
+    target = next(e for e in out["entities"] if e["name"] == "stream_target")
+    assert target["fields"][0]["ref"] == "stream_session"

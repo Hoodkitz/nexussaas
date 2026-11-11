@@ -1,0 +1,9 @@
+{"name": "series-sync", "version": "0.1", "description": "KI-Dubbing-Pipeline: Projekte, Episoden mit Rechtenachweis, Stimmprofile mit Einwilligung, Pipeline-Jobs je Stufe, QA-Berichte, Provenienz-Manifeste",
+ "entities": [
+  {"name": "Project", "fields": [{"name": "title", "type": "text", "required": true}, {"name": "source_language", "type": "text"}, {"name": "target_language", "type": "text"}]},
+  {"name": "Episode", "fields": [{"name": "project_id", "type": "ref:Project", "required": true}, {"name": "title", "type": "text", "required": true}, {"name": "source_video_url", "type": "text", "required": true}, {"name": "rights_document_url", "type": "text"}, {"name": "rights_confirmed_at", "type": "timestamp"}]},
+  {"name": "VoiceProfile", "fields": [{"name": "speaker_name", "type": "text", "required": true}, {"name": "reference_audio_url", "type": "text"}, {"name": "consent_document_url", "type": "text"}, {"name": "consent_given_at", "type": "timestamp"}, {"name": "consent_revoked_at", "type": "timestamp"}]},
+  {"name": "DubbingJob", "fields": [{"name": "episode_id", "type": "ref:Episode", "required": true}, {"name": "voice_profile_id", "type": "ref:VoiceProfile"}, {"name": "status", "type": "text", "required": true}, {"name": "stage", "type": "text"}, {"name": "chunk_index", "type": "integer"}, {"name": "errors", "type": "json"}, {"name": "output_video_url", "type": "text"}]},
+  {"name": "QaReport", "fields": [{"name": "dubbing_job_id", "type": "ref:DubbingJob", "required": true}, {"name": "lse_d", "type": "float"}, {"name": "lse_c", "type": "float"}, {"name": "passed", "type": "boolean"}, {"name": "details", "type": "json"}]},
+  {"name": "ProvenanceManifest", "fields": [{"name": "dubbing_job_id", "type": "ref:DubbingJob", "required": true}, {"name": "ai_disclosure", "type": "boolean", "required": true}, {"name": "manifest", "type": "json"}, {"name": "signature", "type": "text"}]}
+ ]}

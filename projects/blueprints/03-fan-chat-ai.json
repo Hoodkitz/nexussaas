@@ -1,0 +1,8 @@
+{"name": "fan-chat-assistent", "version": "0.1", "description": "Assistenz für Creator: Fans, Nachrichten, KI-Entwürfe mit Freigabe und KI-Kennzeichnung, Gedächtnisfakten, Eskalationen",
+ "entities": [
+  {"name": "CreatorProfile", "fields": [{"name": "display_name", "type": "text", "required": true}, {"name": "persona", "type": "text"}, {"name": "boundaries", "type": "json"}, {"name": "prices", "type": "json"}, {"name": "high_value_threshold", "type": "float"}]},
+  {"name": "Fan", "fields": [{"name": "portal", "type": "text", "required": true}, {"name": "portal_user_id", "type": "text", "required": true}, {"name": "nickname", "type": "text"}, {"name": "birthday", "type": "date"}, {"name": "total_spent", "type": "float"}, {"name": "do_not_contact", "type": "boolean"}]},
+  {"name": "Message", "fields": [{"name": "fan_id", "type": "ref:Fan", "required": true}, {"name": "direction", "type": "text", "required": true}, {"name": "body", "type": "text", "required": true, "max_length": 5000}, {"name": "ai_assisted", "type": "boolean"}, {"name": "sent_at", "type": "timestamp"}]},
+  {"name": "Draft", "fields": [{"name": "fan_id", "type": "ref:Fan", "required": true}, {"name": "kind", "type": "text"}, {"name": "body", "type": "text"}, {"name": "status", "type": "text", "required": true}, {"name": "escalation_reason", "type": "text"}, {"name": "decided_at", "type": "timestamp"}]},
+  {"name": "MemoryFact", "fields": [{"name": "fan_id", "type": "ref:Fan", "required": true}, {"name": "fact", "type": "text", "required": true, "max_length": 300}, {"name": "source", "type": "text"}]}
+ ]}

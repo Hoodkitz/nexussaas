@@ -4,9 +4,9 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from packages.domain.models import TERMINAL_STATUSES, Job, JobEvent, JobStatus, OutboxEvent, Tenant
+from packages.storage.db import scoped_session
 
 TERMINAL = {s.value for s in TERMINAL_STATUSES}
-from packages.storage.db import scoped_session
 
 
 def get_job(tenant_id: str, job_id: str) -> Optional[Job]:

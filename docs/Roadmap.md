@@ -20,7 +20,13 @@ Generated: 2026-11-12T20:29:18.887463Z
 
 Small verifiable items to present to early customers:
 
-- Improve example outbound mail sender in  to a professional support address (updated in this PR).
+- Improve example outbound mail sender in .env.example to a professional support address (updated in this PR).
 - Provide a concise Roadmap + contact placeholders for pilot and sales queries (this file).
+
+## Contact
+
+For pilot inquiries (early access, evaluation): pilot@nexussaas.example
+For sales and partnerships: sales@nexussaas.example
+For support and operations questions: support@nexussaas.example
 
 Generated: 2026-11-13T07:42:53.435494Z

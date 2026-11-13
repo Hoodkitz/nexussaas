@@ -15,3 +15,12 @@ Short roadmap focused on deliverables that help sell NexusSaaS to early customer
   - Improve example email sender in .env.example to a professional support address
 
 Generated: 2026-11-12T20:29:18.887463Z
+
+## Sales readiness checklist
+
+Small verifiable items to present to early customers:
+
+- Improve example outbound mail sender in  to a professional support address (updated in this PR).
+- Provide a concise Roadmap + contact placeholders for pilot and sales queries (this file).
+
+Generated: 2026-11-13T07:42:53.435494Z
